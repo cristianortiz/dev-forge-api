@@ -1,0 +1,85 @@
+networks:
+  dev-forge-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  zitadel_data:
+
+services:
+  # ──────────────────────────────────────────────
+  # PostgreSQL 16 — two databases: dev_forge + zitadel
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: dev-forge-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dev_forge
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - dev-forge-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dev_forge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────
+  # Redis 7
+  # ──────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: dev-forge-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - dev-forge-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────────────
+  # Zitadel (self-hosted) — uses the zitadel DB in PostgreSQL
+  # ──────────────────────────────────────────────
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:latest
+    container_name: dev-forge-zitadel
+    command: start-from-init --masterkey "MasterkeyNeedsToHave32Characters" --tlsMode disabled
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: postgres
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_EXTERNALPORT: 8080
+      ZITADEL_EXTERNALDOMAIN: localhost
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - dev-forge-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/debug/healthz || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
