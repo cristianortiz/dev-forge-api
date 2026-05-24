@@ -567,7 +567,7 @@ dev-forge-api/
 | Migraciones | golang-migrate | CLI externa, archivos `.up.sql` / `.down.sql` |
 | Logger | Zap + otelzap | Structured, bridge OTEL |
 | Config | `os.Getenv` explícito | Sin dependencias externas |
-| Validación | go-playground/validator/v10 | Annotations en DTOs |
+| Validación | go-playground/validator/v10 | Tags `validate:` en DTOs de ports; `middleware.ValidateBody[T]()` valida y llama `c.Next()`; `middleware.GetBody[T](c)` recupera el valor en el handler; lógica pura en `shared/validator.Struct()` |
 | Swagger | swaggo/swag | Annotations en handlers → spec + UI |
 | Testing | stdlib + testify + testcontainers-go | Tests de integración con DB real |
 | Frontend state | Por decidir (Zustand / TanStack Query) | — |

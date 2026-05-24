@@ -6,8 +6,8 @@
 > **Diseño y arquitectura:** [docs/DESIGN.md](docs/DESIGN.md)
 > **Schema de base de datos:** [docs/db-schema.md](docs/db-schema.md)
 
-**Última actualización:** 2026-05-21
-**Estado global:** 🔵 En progreso — Fase 1 en curso (auth completo, próximo: templates)
+**Última actualización:** 2026-05-23
+**Estado global:** 🔵 En progreso — Fase 1: auth ✅ + templates ✅ + seed ✅ + Swagger ✅ → próximo: app module (1.7)
 
 ---
 
@@ -28,7 +28,7 @@
 | Fase | Nombre | Estado | Progreso |
 |---|---|---|---|
 | 0 | Setup del Proyecto | ✅ | 9/10 activas (1 skipped) |
-| 1 | Auth (Zitadel) + Applications + Templates + Git | 🔵 | 5/12 |
+| 1 | Auth (Zitadel) + Applications + Templates + Git | 🔵 | 7/13 ✅ + 1.10 🔵 |
 | 2 | Build → Release → Deploy Pipeline | ⬜ | 0/11 |
 | 3 | Configuration + Services | ⬜ | 0/6 |
 | 4 | Observabilidad (OTEL + Grafana Stack) | ⬜ | 0/9 |
@@ -89,14 +89,15 @@
 | 1.2 | Módulo `auth`: ports + service (validar token, sync user, get me) | ✅ | 2026-05-02 | 2026-05-21 | zitadel/oidc/v3 introspection; JWT Profile con key RSA |
 | 1.3 | Módulo `auth`: middleware Zitadel + `RequireRole` | ✅ | 2026-05-02 | 2026-05-02 | `internal/shared/middleware/auth.go`; claim `urn:zitadel:iam:org:project:roles` |
 | 1.4 | Módulo `template`: domain + ports + service (CRUD) | ✅ | 2026-05-21 | 2026-05-21 | domain, ports, service + unit tests |
-| 1.5 | Módulo `template`: adapters (HTTP handlers, PostgreSQL repo) | ⬜ | — | — | |
-| 1.6 | Módulo `template`: seed inicial (Go API, React SPA, Node.js, Python) | ⬜ | — | — | Incluye Dockerfile template y defaults |
+| 1.5 | Módulo `template`: adapters (HTTP handlers, PostgreSQL repo) | ✅ | 2026-05-23 | 2026-05-23 | pgx repo, Fiber handler, `template_dto.go`, unit tests handler+dto |
+| 1.6 | Módulo `template`: seed inicial (Go API, React SPA, Node.js, Python) | ✅ | 2026-05-23 | 2026-05-23 | `cmd/seed/main.go`; idem potente ON CONFLICT; `make seed` |
 | 1.7 | Módulo `app`: domain + ports + service (CRUD, crear desde template) | ⬜ | — | — | Aplica defaults de template al crear |
 | 1.8 | Módulo `app`: adapters (HTTP handlers, PostgreSQL repo) | ⬜ | — | — | |
 | 1.9 | Módulo `git`: GitHub API (listar repos, branches) | ⬜ | — | — | Requiere GitHub token |
-| 1.10 | Migraciones SQL: users, project_templates, clusters, applications | 🔵 | 2026-05-02 | — | `000001_create_users.up/down.sql` creado; resto pendiente |
+| 1.10 | Migraciones SQL: users, project_templates, clusters, applications | 🔵 | 2026-05-02 | — | `000001_create_users` ✅, `000002_create_project_templates` ✅; clusters+applications pendiente |
 | 1.11 | Módulo `cluster`: domain + ports + service (CRUD, token encriptado) | ⬜ | — | — | Admin-only; usado por `deploy` para construir client-go config |
 | 1.12 | Módulo `cluster`: adapters (HTTP handlers admin + PostgreSQL repo) | ⬜ | — | — | Encripta token con `shared/crypto` |
+| 1.13 | OpenAPI spec + Swagger UI en `/api/v1/docs` | ✅ | 2026-05-23 | 2026-05-23 | `swaggo/swag` + `swaggo/fiber-swagger`; `docs/swagger/`; `make swagger` |
 
 **Notas de implementación verificadas:**
 - `go build ./...` limpio ✅
@@ -111,13 +112,35 @@
 - **Unit tests añadidos (2026-05-21):**
   - `auth/domain`: `Role.IsValid()` — 100% coverage
   - `auth/service`: `SyncUser`, `GetUserByID`, `extractRoles` — 67% (ValidateToken/GetMe/New requieren Zitadel vivo → integration tests)
-  - `template/service`: CRUD completo, validaciones, partial update, errores — 86% coverage
-  - `shared/middleware`: `Authenticated`, `RequireRole`, `bearerToken`, `GetUser`, `GetClaims` — 100% coverage
+  - `template/service`: CRUD completo, partial update, errores — 85.1% coverage
+  - `shared/middleware`: `Authenticated`, `RequireRole`, `bearerToken`, `GetUser`, `GetClaims` — 78.6% coverage
 - Estrategia de testing documentada en `docs/DESIGN.md` §10
+- **Implementaciones adicionales (2026-05-23):**
+  - `shared/validator/validator.go`: `Struct()` — validación por struct tags con `go-playground/validator/v10`
+  - `shared/middleware/validation.go`: `ValidateBody[T]()` + `GetBody[T]()` — Fiber middleware genérico para validar y parsear JSON body
+  - `template/adapters/repository/`: pgx repo completo (List con filtros dinámicos, GetByID, GetBySlug, Create, Update, Deactivate)
+  - `template/adapters/handler/template_handler.go`: 5 endpoints CRUD con error mapping domain → HTTP
+  - `template/adapters/handler/template_dto.go`: request/response structs con `json.RawMessage` para JSONB, `toInput()`, `toResponse()`
+  - `template/adapters/handler/template_dto_test.go`: 10 tests — mappings, conversión RawMessage↔[]byte, RFC3339, serialización JSONB como objeto
+  - `template/adapters/handler/template_handler_test.go`: 23 tests — todos los handlers con mock service, Fiber httptest
+  - `migrations/000002_create_project_templates.up/down.sql`: tabla `project_templates` con índices language e is_active
+  - Template module wired en `cmd/server/routes.go`
+  - **Implementaciones adicionales (2026-05-23 — seed + Swagger):**
+  - `cmd/seed/main.go`: seed de 4 templates (go-rest-api, react-spa, nodejs-express, python-fastapi); idempotente con ON CONFLICT (slug) DO NOTHING; `make seed`
+  - `cmd/server/docs.go`: anotaciones `@title`, `@BasePath`, `@securityDefinitions.apikey BearerAuth` para el API root
+  - `docs/swagger/`: spec generada por `swag init` (docs.go, swagger.json, swagger.yaml); `make swagger` para regenerar
+  - Swagger UI montado en `GET /api/v1/docs/*` via `swaggo/fiber-swagger`; sin auth requerida
+  - `swaggertype:"object"` añadido a campos `json.RawMessage` en `template_dto.go` para correcta generación de spec
+  - **Cobertura total: 85.7%** (CI gate: 70%)
 
 **Criterios de verificación:**
 - [x] GET `/api/v1/auth/me` → perfil + user sincronizado en DB ✅
-- [ ] GET `/api/v1/templates` lista plantillas disponibles
+- [x] `go build ./...` limpio con template module wired ✅
+- [x] 33 tests handler+dto pasan — `template/adapters/handler` ✅
+- [ ] `make migrate-up` aplica 000002 y GET `/api/v1/templates` responde (requiere DB viva)
+- [ ] POST `/api/v1/templates` crea template como admin
+- [x] Seed data disponible — `make seed` inserta 4 templates (go-rest-api, react-spa, nodejs-express, python-fastapi) ✅
+- [x] Swagger UI accesible en `/api/v1/docs/index.html` ✅
 - [ ] POST `/api/v1/apps` con `template_id` → defaults pre-cargados
 - [ ] POST `/api/v1/apps` sin `template_id` → app vacía
 - [ ] GET `/api/v1/github/repos` → repos reales de GitHub
@@ -238,7 +261,7 @@
 | # | Tarea | Estado | Fecha inicio | Fecha fin | Notas |
 |---|---|---|---|---|---|
 | 6.1 | Helm chart completo: deployment, service, PostgreSQL, Redis | ⬜ | — | — | `deployments/helm/dev-forge/` |
-| 6.2 | OpenAPI spec auto-generada + Swagger UI en `/api/v1/docs` | ⬜ | — | — | swag |
+| 6.2 | OpenAPI spec auto-generada + Swagger UI en `/api/v1/docs` | ⏭️ | — | — | Adelantado a Fase 1 como tarea 1.13 |
 | 6.3 | Deploy dev-forge en homelab via Helm | ⬜ | — | — | Dogfooding |
 | 6.4 | Seed data script: datos de demo realistas | ⬜ | — | — | |
 | 6.5 | Docker Compose local: API + DB + Redis + Frontend | ⬜ | — | — | |
@@ -310,6 +333,7 @@
 | 2026-05-21 | Unit tests añadidos: auth/domain (100%), auth/service (67%), template/service (86%), middleware (100%) |
 | 2026-05-21 | Estrategia de testing documentada en docs/DESIGN.md §10 (unit/integration/E2E, targets, patrones) |
 | 2026-05-21 | Tarea 1.4 completada: template domain + ports + service |
+| 2026-05-23 | Validación añadida: shared/validator (Struct puro) + shared/middleware/validation.go (ValidateBody[T], GetBody[T]) — go-playground/validator/v10 |
 
 ---
 

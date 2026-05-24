@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"go.uber.org/zap"
 
+	swaggerdocs "github.com/cristianortiz/dev-forge/docs/swagger"
 	"github.com/cristianortiz/dev-forge/internal/shared/config"
 	"github.com/cristianortiz/dev-forge/internal/shared/database"
 	"github.com/cristianortiz/dev-forge/internal/shared/logger"
@@ -32,6 +34,16 @@ func main() {
 		zap.String("env", cfg.Environment),
 		zap.String("version", cfg.OTEL.ServiceVersion),
 	)
+
+	// ── Swagger host (runtime) ───────────────────────────────────────────
+	// SwaggerInfo.Host is set from SERVER_HOST / SERVER_PORT so the "Try it out"
+	// button in the UI always targets the correct server, regardless of port.
+	// 0.0.0.0 is a bind address, not a valid browser hostname — normalise to localhost.
+	swaggerHost := cfg.Server.Host
+	if swaggerHost == "" || swaggerHost == "0.0.0.0" {
+		swaggerHost = "localhost"
+	}
+	swaggerdocs.SwaggerInfo.Host = fmt.Sprintf("%s:%d", swaggerHost, cfg.Server.Port)
 
 	// ── database ──────────────────────────────────────────────────────────
 	ctx := context.Background()

@@ -43,9 +43,6 @@ func (s *TemplateService) GetByID(ctx context.Context, id uuid.UUID) (*domain.Pr
 
 // Create validates and persists a new project template.
 func (s *TemplateService) Create(ctx context.Context, input ports.CreateTemplateInput) (*domain.ProjectTemplate, error) {
-	if input.Name == "" || input.Slug == "" || input.Language == "" || input.DockerfileTemplate == "" {
-		return nil, fmt.Errorf("template: create: name, slug, language and dockerfile_template are required")
-	}
 
 	// Apply safe defaults for JSONB fields.
 	if len(input.DefaultParams) == 0 {
