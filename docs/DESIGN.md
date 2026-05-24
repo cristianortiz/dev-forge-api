@@ -2,7 +2,7 @@
 
 > Documento de referencia estático. Contiene la visión, el modelo de dominio, la arquitectura, las decisiones técnicas y el stack. **No** contiene estado de tareas ni progreso — eso vive en `DEV-FORGE-PLAN.md`.
 
-**Última revisión:** 2026-05-01
+**Última revisión:** 2026-05-24
 
 ---
 
@@ -17,6 +17,8 @@
 7. [Integraciones Reales vs Simuladas](#7-integraciones-reales-vs-simuladas)
 8. [Decisiones Técnicas](#8-decisiones-técnicas)
 9. [Stack Tecnológico](#9-stack-tecnológico)
+10. [Template Repositories — Estrategia de Scaffold](#10-template-repositories--estrategia-de-scaffold)
+11. [Estrategia de Testing](#11-estrategia-de-testing)
 
 ---
 
@@ -521,7 +523,8 @@ dev-forge-api/
 
 | Feature | Real | Simulado | Notas |
 |---|---|---|---|
-| Project Templates | ✅ | — | Templates en DB + Dockerfile templates |
+| Project Templates | ✅ | — | Templates en DB; scaffold vía GitHub Template Repos (`repo_template_url`) |
+| GitHub Template Repos | ✅ | — | GitHub API `POST /repos/{template}/generate` → nuevo repo con scaffold |
 | GitHub repos/branches/webhooks | ✅ | — | GitHub API v3 |
 | Docker image build | ✅ | — | Docker SDK for Go |
 | Deploy a K8s | ✅ | — | client-go, objetos Go en memoria |
@@ -551,7 +554,7 @@ dev-forge-api/
 | K8s | Homelab cluster real | Dogfooding, experiencia con K8s de producción |
 | Git provider | GitHub | API madura, webhooks |
 | Tenancy | Single-tenant + RBAC (3 roles) | Suficiente para demostrar governance |
-| Auth | Zitadel self-hosted (OAuth2/OIDC) | JWT RS256, gestiona login/MFA/password reset |
+| Auth | Zitadel Cloud (OAuth2/OIDC) | JWT RS256, gestiona login/MFA/password reset; también soporta self-hosted |
 | RBAC aplicación | Zitadel project roles | Roles en claim JWT; sin auth propio |
 | RBAC cluster | K8s ServiceAccount + ClusterRole | Principio menor privilegio para el proceso |
 | Comunicación módulos | Interfaces directas (ports) | Hexagonal puro; sin event bus |
@@ -608,7 +611,123 @@ dev-forge-api/
 
 ---
 
-## 10. Estrategia de Testing
+## 10. Template Repositories — Estrategia de Scaffold
+
+### El problema que resuelven
+
+`ProjectTemplate` tiene **dos campos con responsabilidades distintas** que actúan en momentos distintos del ciclo de vida:
+
+| Campo | Cuándo se usa | Qué resuelve |
+|---|---|---|
+| `dockerfile_template` | **Build time** — al disparar un build | Instrucciones Docker para construir la imagen; la app no tiene Dockerfile propio |
+| `repo_template_url` | **App creation time** — al crear la Application | URL del GitHub Template Repository con el scaffold de código production-ready |
+
+### Filosofía: apps de nivel producción desde el primer commit
+
+El diferenciador clave de dev-forge frente a un IDP genérico: los scaffolds **no son "hello world"** — son aplicaciones con el mismo stack, arquitectura y prácticas que el propio dev-forge. Un developer genera una nueva app y el código ya incluye auth, observabilidad, API docs y CI/CD listos para producción.
+
+### GitHub Template Repositories
+
+Cada `ProjectTemplate` apunta vía `repo_template_url` a un **GitHub Template Repository** mantenido en la organización `github.com/dev-forge-templates/`. GitHub expone una API nativa para generar repos desde templates:
+
+```
+POST /api/v1/apps  { name: "payments-service", template_id: "..." }
+        │
+        ▼
+  Lookup ProjectTemplate → repo_template_url = "https://github.com/dev-forge-templates/go-microservice"
+        │
+        ▼
+  GitHub API: POST /repos/dev-forge-templates/go-microservice/generate
+              { owner: user.github_login, name: "payments-service", private: true }
+        │
+        ▼
+  Nuevo repo con scaffold completo → Application.repo_url = "https://github.com/{user}/payments-service"
+        │
+        ▼
+  dev-forge module git: sustituye placeholders, hace commit inicial
+```
+
+El developer clona el repo generado, adapta el dominio de negocio, hace push → webhook GitHub → build pipeline de dev-forge.
+
+### Catálogo de templates
+
+#### `go-microservice` — REST API Go (microservicio enfocado)
+
+Enfocado en un dominio único. Provee el **chassis** de la aplicación: estructura, cross-cutting concerns y herramientas. La infraestructura (DB, cache, colas) es responsabilidad del equipo de producto — el template no la prescribe para no acoplar cada microservicio a un stack de datos concreto.
+
+| Categoría | Característica | Implementación |
+|---|---|---|
+| **Estructura** | Arquitectura | Hexagonal: `domain/` → `ports/` → `adapters/(handler+repository)` → `service/` |
+| **HTTP** | Router | Fiber v2 + recovery / CORS / request-id / timeout middleware |
+| **Auth** | JWT middleware | Zitadel JWT (`shared/middleware/auth.go`) + `RequireRole` helper |
+| **Auth** | RBAC | Roles vía claims Zitadel (`urn:zitadel:iam:org:project:roles`) |
+| **HTTP** | Validación | `go-playground/validator/v10` + `middleware.ValidateBody[T]()` genérico |
+| **Observabilidad** | Trazas + métricas | OTEL SDK → Collector; `shared/telemetry/` listo para Jaeger/Prometheus |
+| **Observabilidad** | Logging | Zap JSON + otelzap bridge; `shared/logger/` |
+| **API docs** | Swagger | swaggo/swag annotations → Swagger UI en `/docs`; `make swagger` |
+| **Infra** | Health | `GET /health` + `GET /ready` (K8s liveness/readiness probes) |
+| **Config** | Variables de entorno | `shared/config/` vía `os.Getenv` + `.env.example` documentado |
+| **Runtime** | Shutdown | Graceful shutdown con `os.Signal` + timeout configurable |
+| **Build** | Docker | Multi-stage: `golang:1.22-alpine` builder → `alpine:3.19` runtime |
+| **CI/CD** | Pipeline | GitHub Actions: test → lint → build → push image |
+| **DX** | Makefile | `dev`, `build`, `test`, `test-coverage`, `lint`, `swagger` |
+| **Testing** | Unit | `service/` + `domain/` con mocks hand-rolled (sin infra) |
+
+> **Infraestructura opcional**: el template incluye un directorio `adapters/repository/` con un ejemplo de repositorio in-memory. El equipo agrega pgx, Redis, gRPC, etc. según necesidad. Esto mantiene el template liviano y agnóstico al almacenamiento.
+
+#### `go-modular-monolith` — Monolito Modular Go
+
+Múltiples módulos en el mismo binario. Misma estructura que dev-forge como punto de partida. Mismo principio: **no prescribe infraestructura** — incluye el módulo `auth` (Zitadel completo) y un módulo de dominio de ejemplo con repositorio in-memory sustituible.
+
+Incluye todo lo de `go-microservice` más:
+- Módulos pre-cargados: `auth` (Zitadel completo) + un módulo de dominio de ejemplo
+- `cmd/server/routes.go` como composition root documentado
+- `cmd/seed/` para datos iniciales idempotentes
+- Convención `<module>_dto.go` separado del handler
+- Documentado para escalar a +10 módulos sin refactor
+
+#### `react-spa` — Single-Page Application React
+
+| Característica | Implementación |
+|---|---|
+| Framework | React 18 + Vite + TypeScript strict |
+| Auth | Zitadel OIDC PKCE flow (`@zitadel/react`) + route guards por rol |
+| Data fetching | TanStack Query v5 + cliente auto-generado desde OpenAPI spec |
+| UI | shadcn/ui + Tailwind CSS |
+| Observabilidad | OTEL Web SDK → Collector |
+| Testing | Vitest + Testing Library |
+| Docker | Multi-stage: `node:22-alpine` builder → `nginx:1.27-alpine` runtime |
+| CI/CD | GitHub Actions: type-check → test → build → push image |
+
+#### `nodejs-express` — REST API Node.js / TypeScript
+
+TypeScript estricto, Express, Zitadel JWT middleware (`jsonwebtoken` + JWKS endpoint), OpenTelemetry Node.js SDK, Swagger vía tsoa, Docker multi-stage, GitHub Actions.
+
+#### `python-fastapi` — REST API Python
+
+FastAPI, Python-jose para validación JWT Zitadel, SQLAlchemy + Alembic, OTEL Python SDK, docs automáticos de FastAPI (`/docs`), Docker multi-stage, GitHub Actions.
+
+### Placeholders en templates
+
+Los templates usan variables que dev-forge sustituye al generar el repo (vía commit del módulo `git`):
+
+| Variable | Valor sustituido |
+|---|---|
+| `{{ APP_NAME }}` | `Application.name` |
+| `{{ APP_SLUG }}` | `Application.name` en kebab-case |
+| `{{ GITHUB_REPO_URL }}` | URL del repo generado |
+| `{{ ZITADEL_ISSUER }}` | `cfg.Zitadel.Issuer` del tenant |
+| `{{ DB_NAME }}` | `Application.name` en snake_case |
+| `{{ OTEL_SERVICE_NAME }}` | `Application.name` |
+| `{{ MODULE_PATH }}` | `github.com/{org}/{app-slug}` |
+
+### Mantenimiento de los template repos
+
+Los repos de `dev-forge-templates` son proyectos reales mantenidos independientemente: tienen sus propios tests, CI, y se actualizan cuando cambia el stack (e.g., nueva versión de Fiber, nuevo patrón en dev-forge). Cada `ProjectTemplate.is_active` permite desactivar versiones obsoletas sin romper apps existentes.
+
+---
+
+## 11. Estrategia de Testing
 
 ### Capas
 
