@@ -14,7 +14,6 @@ type Config struct {
 
 	Server   ServerConfig
 	Database DatabaseConfig
-	Redis    RedisConfig
 	Zitadel  ZitadelConfig
 	OTEL     OTELConfig
 }
@@ -54,16 +53,11 @@ func (d DatabaseConfig) URL() string {
 	)
 }
 
-type RedisConfig struct {
-	Addr     string
-	Password string
-	DB       int
-}
-
 // ZitadelConfig holds OIDC configuration for validating JWTs issued by Zitadel.
 type ZitadelConfig struct {
-	Issuer   string // e.g. http://localhost:8080
+	Issuer   string // e.g. https://dev-forge-2hcwhk.us1.zitadel.cloud
 	ClientID string // OIDC client ID of the dev-forge project app
+	KeyPath  string // path to the JSON key file for JWT-profile introspection
 }
 
 type OTELConfig struct {
@@ -112,15 +106,10 @@ func Load() (*Config, error) {
 			HealthCheckInterval: getEnvDuration("DB_HEALTH_CHECK_INTERVAL", 1*time.Minute),
 		},
 
-		Redis: RedisConfig{
-			Addr:     getEnv("REDIS_ADDR", "localhost:6379"),
-			Password: getEnv("REDIS_PASSWORD", ""),
-			DB:       getEnvInt("REDIS_DB", 0),
-		},
-
 		Zitadel: ZitadelConfig{
 			Issuer:   getEnv("ZITADEL_ISSUER", "http://localhost:8080"),
 			ClientID: getEnv("ZITADEL_CLIENT_ID", ""),
+			KeyPath:  getEnv("ZITADEL_KEY_PATH", ""),
 		},
 
 		OTEL: OTELConfig{

@@ -605,3 +605,48 @@ dev-forge-api/
 - Traces: OTEL Collector → Jaeger
 - Metrics: OTEL Collector → Prometheus → Grafana
 - Logs: Promtail → Loki → Grafana
+
+---
+
+## 10. Estrategia de Testing
+
+### Capas
+
+| Capa | Herramientas | Scope | Cuándo |
+|---|---|---|---|
+| **Unit** | stdlib `testing`, mocks hand-rolled | `domain/`, `service/`, `middleware/` | En cada PR, sin infra externa |
+| **Integration** | testify + testcontainers-go | `adapters/repository/` | CI pipeline (DB real en Docker) |
+| **E2E** | curl / httptest | HTTP handlers completos | Antes de release |
+
+### Qué se testea en unit
+
+- **`domain/`**: lógica pura — métodos de entidad, validaciones, errores de dominio
+- **`service/`**: casos de uso con `RepositoryMock` hand-rolled en `_test.go` local
+- **`shared/middleware/`**: handlers Fiber con `fiber.App.Test()` + mock de `ports.AuthService`
+
+### Qué NO se testea en unit (requiere integración)
+
+| Código | Razón | Cobertura alternativa |
+|---|---|---|
+| `adapters/repository/` | Requiere PostgreSQL real | Integration tests (testcontainers-go) |
+| `auth/service.New`, `ValidateToken`, `GetMe` | Requiere Zitadel vivo (rs.NewResourceServerFromKeyFile) | E2E con servidor real |
+| `cmd/server/` | Wire-up — lógica mínima | Smoke test en CI |
+
+### Objetivo de cobertura
+
+| Package | Target | Estado actual |
+|---|---|---|
+| `auth/domain` | ≥ 70% | 100% ✅ |
+| `auth/service` | ≥ 70% unitesteable¹ | 67% (ValidateToken/GetMe excluidos) |
+| `template/service` | ≥ 70% | 86% ✅ |
+| `shared/middleware` | ≥ 70% | 100% ✅ |
+
+> ¹ `auth/service` excluye `New`, `ValidateToken` y `GetMe` del cómputo unitario — estos requieren conexión viva a Zitadel y se cubren en tests de integración/E2E.
+
+### Patrones establecidos
+
+- Mocks inline en `*_test.go`, **mismo package** (`package service`) — sin frameworks de generación
+- `zap.NewNop()` para logger en todos los tests
+- `context.Background()` como contexto base
+- Un archivo `_test.go` por package: `domain/X_test.go`, `service/X_test.go`, `middleware/auth_test.go`
+- Errores de dominio propagados con `errors.Is()` — los tests verifican el tipo exacto

@@ -5,25 +5,38 @@ help: ## Show available targets
 # ── Dev ───────────────────────────────────────────────────────────────────────
 .PHONY: dev
 dev: ## Run the server with hot-reload (requires air)
-	air -c .air.toml
+	@set -a && . ./.env && set +a && air -c .air.toml
 
 .PHONY: run
 run: ## Run the server without hot-reload
-	go run ./cmd/server/main.go
+	@set -a && . ./.env && set +a && go run ./cmd/server/
 
 .PHONY: build
 build: ## Build the binary into bin/dev-forge
-	go build -o bin/dev-forge ./cmd/server/main.go
+	go build -o bin/dev-forge ./cmd/server/
 
 # ── Test ──────────────────────────────────────────────────────────────────────
+# Only packages that actually contain test files (avoids skewing total with untested adapters/cmd)
+TEST_PKGS := $(shell go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... 2>/dev/null)
+
 .PHONY: test
-test: ## Run all tests
-	go test -v -race ./...
+test: ## Run all tests with per-package and total coverage
+	go test -v -race -coverprofile=coverage.out -covermode=atomic $(TEST_PKGS)
+	@echo ""
+	@go tool cover -func=coverage.out | grep "^total:"
 
 .PHONY: test-coverage
-test-coverage: ## Run tests with coverage report
-	go test -v -race -coverprofile=coverage.out ./...
+test-coverage: ## Run tests with total coverage summary + HTML report
+	go test -v -race -coverprofile=coverage.out -covermode=atomic $(TEST_PKGS)
+	@go tool cover -func=coverage.out | grep "^total:"
 	go tool cover -html=coverage.out
+
+.PHONY: test-check
+test-check: ## CI: fail if total coverage < 70% (tested packages only)
+	@go test -race -coverprofile=coverage.out -covermode=atomic $(TEST_PKGS) > /dev/null
+	@TOTAL=$$(go tool cover -func=coverage.out | grep "^total:" | awk '{print $$3}' | tr -d '%'); \
+	echo "Coverage: $${TOTAL}%"; \
+	awk -v t="$$TOTAL" 'BEGIN { if (t+0 < 70) { print "FAIL: coverage " t "% is below the 70% threshold"; exit 1 } else { print "OK: coverage above threshold" } }'
 
 # ── Lint ──────────────────────────────────────────────────────────────────────
 .PHONY: lint

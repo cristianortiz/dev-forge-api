@@ -34,8 +34,6 @@ func TestLoad_Defaults(t *testing.T) {
 		{"Database.MaxConnLifetime", cfg.Database.MaxConnLifetime, 1 * time.Hour},
 		{"Database.MaxConnIdleTime", cfg.Database.MaxConnIdleTime, 30 * time.Minute},
 		{"Database.HealthCheckInterval", cfg.Database.HealthCheckInterval, 1 * time.Minute},
-		{"Redis.Addr", cfg.Redis.Addr, "localhost:6379"},
-		{"Redis.DB", cfg.Redis.DB, 0},
 		{"Zitadel.Issuer", cfg.Zitadel.Issuer, "http://localhost:8080"},
 		{"Zitadel.ClientID", cfg.Zitadel.ClientID, ""},
 		{"OTEL.Enabled", cfg.OTEL.Enabled, false},
@@ -73,9 +71,6 @@ func TestLoad_FromEnv(t *testing.T) {
 	t.Setenv("DB_MAX_CONN_LIFETIME", "2h")
 	t.Setenv("DB_MAX_CONN_IDLE_TIME", "15m")
 	t.Setenv("DB_HEALTH_CHECK_INTERVAL", "30s")
-	t.Setenv("REDIS_ADDR", "redis.internal:6380")
-	t.Setenv("REDIS_PASSWORD", "redispass")
-	t.Setenv("REDIS_DB", "1")
 	t.Setenv("ZITADEL_ISSUER", "https://auth.example.com")
 	t.Setenv("ZITADEL_CLIENT_ID", "abc123")
 	t.Setenv("OTEL_ENABLED", "true")
@@ -108,9 +103,6 @@ func TestLoad_FromEnv(t *testing.T) {
 		{"Database.MaxConnLifetime", cfg.Database.MaxConnLifetime, 2 * time.Hour},
 		{"Database.MaxConnIdleTime", cfg.Database.MaxConnIdleTime, 15 * time.Minute},
 		{"Database.HealthCheckInterval", cfg.Database.HealthCheckInterval, 30 * time.Second},
-		{"Redis.Addr", cfg.Redis.Addr, "redis.internal:6380"},
-		{"Redis.Password", cfg.Redis.Password, "redispass"},
-		{"Redis.DB", cfg.Redis.DB, 1},
 		{"Zitadel.Issuer", cfg.Zitadel.Issuer, "https://auth.example.com"},
 		{"Zitadel.ClientID", cfg.Zitadel.ClientID, "abc123"},
 		{"OTEL.Enabled", cfg.OTEL.Enabled, true},
@@ -233,7 +225,6 @@ func clearEnv(t *testing.T) {
 		"DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_SSL_MODE",
 		"DB_MAX_CONNS", "DB_MIN_CONNS", "DB_MAX_CONN_LIFETIME",
 		"DB_MAX_CONN_IDLE_TIME", "DB_HEALTH_CHECK_INTERVAL",
-		"REDIS_ADDR", "REDIS_PASSWORD", "REDIS_DB",
 		"ZITADEL_ISSUER", "ZITADEL_CLIENT_ID",
 		"OTEL_ENABLED", "OTEL_SERVICE_NAME", "OTEL_SERVICE_VERSION",
 		"OTEL_EXPORTER_OTLP_ENDPOINT",

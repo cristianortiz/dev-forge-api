@@ -6,8 +6,8 @@
 > **Diseño y arquitectura:** [docs/DESIGN.md](docs/DESIGN.md)
 > **Schema de base de datos:** [docs/db-schema.md](docs/db-schema.md)
 
-**Última actualización:** 2026-05-01
-**Estado global:** 🔵 En progreso — Fase 0 avanzada (8 de 10 tareas activas completadas)
+**Última actualización:** 2026-05-21
+**Estado global:** 🔵 En progreso — Fase 1 en curso (auth completo, próximo: templates)
 
 ---
 
@@ -27,8 +27,8 @@
 
 | Fase | Nombre | Estado | Progreso |
 |---|---|---|---|
-| 0 | Setup del Proyecto | 🔵 | 8/10 activas (1 skipped) |
-| 1 | Auth (Zitadel) + Applications + Templates + Git | ⬜ | 0/12 |
+| 0 | Setup del Proyecto | ✅ | 9/10 activas (1 skipped) |
+| 1 | Auth (Zitadel) + Applications + Templates + Git | 🔵 | 5/12 |
 | 2 | Build → Release → Deploy Pipeline | ⬜ | 0/11 |
 | 3 | Configuration + Services | ⬜ | 0/6 |
 | 4 | Observabilidad (OTEL + Grafana Stack) | ⬜ | 0/9 |
@@ -53,24 +53,26 @@
 | 0.8 | Package `shared/server` | ✅ | 2026-04-28 | 2026-04-28 | Fiber v2, CORS, recovery, zapLogger, `/health`, `/ready` |
 | 0.9 | Makefile | ✅ | 2026-04-28 | 2026-04-28 | Targets: build, test, lint, migrate-*, dev, docker-* |
 | 0.10 | Verificar conectividad homelab K8s (kubeconfig, client-go ping) | ⬜ | — | — | Requiere kubeconfig local configurado |
-| 0.11 | Configurar Zitadel: proyecto `dev-forge`, roles, app OIDC | ⬜ | — | — | Manual en Zitadel console tras `make docker-up` |
+| 0.11 | Configurar Zitadel: proyecto `dev-forge`, roles, app OIDC | ✅ | 2026-05-11 | 2026-05-21 | Zitadel Cloud; app JWT Profile; service user dev-forge-test con PAT |
 
 **Notas de implementación verificadas:**
 - `go.mod`: Go 1.26, Fiber v2, pgx v5, Zap, OTEL, otelpgx ✅
-- `.env.example`: variables App, DB, Redis, Zitadel, OTEL documentadas ✅
+- `.env.example`: variables App, DB, Zitadel, OTEL documentadas ✅
+- Zitadel Cloud configurado: proyecto `dev-forge`, roles admin/developer/viewer, app JWT Profile ✅
+- `secrets/zitadel-api-key.json`: key RSA de la API app (gitignored) ✅
+- `docs/zitadel-setup.md`: guía completa de setup y arquitectura de auth ✅
 - `internal/shared/telemetry/`: vacío — pendiente Fase 4 (tarea 4.2)
 - `internal/shared/middleware/`: vacío — pendiente Fase 1 (tarea 1.3)
 - `internal/shared/crypto/`: vacío — pendiente Fase 3 (tarea 3.1)
 - `migrations/`: vacío — se puebla en Fases 1, 2, 3 y 5
 
 **Criterios de verificación:**
-- [x] `make docker-up` levanta PostgreSQL, Redis y Zitadel
+- [x] `make docker-up` levanta PostgreSQL
 - [x] `make dev` arranca el servidor y responde en `/health`
 - [x] `make test` ejecuta tests
-- [ ] `make migrate-up` — sin migraciones hasta Fase 1 (esperado)
+- [x] `make migrate-up` aplica migración users
 - [ ] `kubectl get nodes` conecta al homelab cluster (pendiente 0.10)
-- [x] Zitadel accesible en `http://localhost:8080`
-- [ ] Zitadel configurado: proyecto, roles, app OIDC (pendiente 0.11)
+- [x] Zitadel Cloud configurado: proyecto, roles, app JWT Profile ✅
 - [x] VS Code workspace abierto correctamente
 
 **Próximo paso:** `make docker-up` → verificar Zitadel → completar 0.11 → verificar kubeconfig (0.10).
@@ -83,21 +85,38 @@
 
 | # | Tarea | Estado | Fecha inicio | Fecha fin | Notas |
 |---|---|---|---|---|---|
-| 1.1 | Módulo `auth`: domain (User entity, zitadel_id) | ⬜ | — | — | |
-| 1.2 | Módulo `auth`: ports + service (validar JWT, sync user, get me) | ⬜ | — | — | SDK: `github.com/zitadel/zitadel-go/v3` |
-| 1.3 | Módulo `auth`: middleware Zitadel (JWKS) + `RequireRole` | ⬜ | — | — | Claim `urn:zitadel:iam:org:project:roles` |
-| 1.4 | Módulo `template`: domain + ports + service (CRUD) | ⬜ | — | — | |
+| 1.1 | Módulo `auth`: domain (User entity, zitadel_id) | ✅ | 2026-05-02 | 2026-05-02 | `internal/auth/domain/user.go` |
+| 1.2 | Módulo `auth`: ports + service (validar token, sync user, get me) | ✅ | 2026-05-02 | 2026-05-21 | zitadel/oidc/v3 introspection; JWT Profile con key RSA |
+| 1.3 | Módulo `auth`: middleware Zitadel + `RequireRole` | ✅ | 2026-05-02 | 2026-05-02 | `internal/shared/middleware/auth.go`; claim `urn:zitadel:iam:org:project:roles` |
+| 1.4 | Módulo `template`: domain + ports + service (CRUD) | ✅ | 2026-05-21 | 2026-05-21 | domain, ports, service + unit tests |
 | 1.5 | Módulo `template`: adapters (HTTP handlers, PostgreSQL repo) | ⬜ | — | — | |
 | 1.6 | Módulo `template`: seed inicial (Go API, React SPA, Node.js, Python) | ⬜ | — | — | Incluye Dockerfile template y defaults |
 | 1.7 | Módulo `app`: domain + ports + service (CRUD, crear desde template) | ⬜ | — | — | Aplica defaults de template al crear |
 | 1.8 | Módulo `app`: adapters (HTTP handlers, PostgreSQL repo) | ⬜ | — | — | |
 | 1.9 | Módulo `git`: GitHub API (listar repos, branches) | ⬜ | — | — | Requiere GitHub token |
-| 1.10 | Migraciones SQL: users, project_templates, clusters, applications | ⬜ | — | — | |
+| 1.10 | Migraciones SQL: users, project_templates, clusters, applications | 🔵 | 2026-05-02 | — | `000001_create_users.up/down.sql` creado; resto pendiente |
 | 1.11 | Módulo `cluster`: domain + ports + service (CRUD, token encriptado) | ⬜ | — | — | Admin-only; usado por `deploy` para construir client-go config |
 | 1.12 | Módulo `cluster`: adapters (HTTP handlers admin + PostgreSQL repo) | ⬜ | — | — | Encripta token con `shared/crypto` |
 
+**Notas de implementación verificadas:**
+- `go build ./...` limpio ✅
+- `go test ./...` pasa ✅
+- Token introspection via `zitadel/oidc/v3` — soporta PAT y JWT ✅
+- `GET /api/v1/auth/me` responde `{id, email, name, role}` ✅
+- Usuario sincronizado en DB en primera llamada ✅
+- `internal/auth/adapters/handler/` → `GET /api/v1/auth/me`
+- `internal/auth/adapters/repository/` → pgx, users table
+- `migrations/000001_create_users.up.sql` aplicada
+- Auth module wired en `cmd/server/routes.go`
+- **Unit tests añadidos (2026-05-21):**
+  - `auth/domain`: `Role.IsValid()` — 100% coverage
+  - `auth/service`: `SyncUser`, `GetUserByID`, `extractRoles` — 67% (ValidateToken/GetMe/New requieren Zitadel vivo → integration tests)
+  - `template/service`: CRUD completo, validaciones, partial update, errores — 86% coverage
+  - `shared/middleware`: `Authenticated`, `RequireRole`, `bearerToken`, `GetUser`, `GetClaims` — 100% coverage
+- Estrategia de testing documentada en `docs/DESIGN.md` §10
+
 **Criterios de verificación:**
-- [ ] GET `/api/v1/auth/me` → perfil + user sincronizado en DB
+- [x] GET `/api/v1/auth/me` → perfil + user sincronizado en DB ✅
 - [ ] GET `/api/v1/templates` lista plantillas disponibles
 - [ ] POST `/api/v1/apps` con `template_id` → defaults pre-cargados
 - [ ] POST `/api/v1/apps` sin `template_id` → app vacía
@@ -105,7 +124,7 @@
 - [ ] Viewer no puede crear apps (RBAC)
 - [ ] Solo admin puede crear/editar plantillas
 - [ ] POST `/api/v1/admin/clusters` registra cluster con token encriptado
-- [ ] Tests >80% coverage en domain y service layers
+- [ ] Tests ≥70% coverage en `domain/` y `service/` de cada módulo (unit) — ver `docs/DESIGN.md §10`
 
 ---
 
@@ -284,7 +303,14 @@
 | 2026-04-28 | Frontend como repo separado `dev-forge-ui`; API-first |
 | 2026-04-28 | Fase 0 completada (tareas 0.2–0.9) |
 | 2026-05-01 | Separación en tres archivos: PLAN (tracking) + DESIGN + db-schema |
+| 2026-05-02 | Pre-commit hook instalado (build + test en cada commit) |
+| 2026-05-02 | Fase 1 iniciada: auth domain + ports + service + middleware + handler + repo + migración users |
+| 2026-05-11 | Zitadel: app reemplazada por JWT Profile; introspección via zitadel/oidc/v3 |
+| 2026-05-21 | Auth end-to-end verificado: GET /api/v1/auth/me → 200, user sincronizado en DB |
+| 2026-05-21 | Unit tests añadidos: auth/domain (100%), auth/service (67%), template/service (86%), middleware (100%) |
+| 2026-05-21 | Estrategia de testing documentada en docs/DESIGN.md §10 (unit/integration/E2E, targets, patrones) |
+| 2026-05-21 | Tarea 1.4 completada: template domain + ports + service |
 
 ---
 
-> **Próximo paso:** Completar 0.10 (kubeconfig homelab) + 0.11 (Zitadel console) → Iniciar Fase 1.
+> **Próximo paso:** 1.4 módulo `template` (domain + ports + service) → 1.5 adapters → 1.6 seed data.

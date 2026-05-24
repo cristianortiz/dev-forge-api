@@ -1,4 +1,4 @@
-package server
+package main
 
 import (
 	"context"
@@ -6,11 +6,12 @@ import (
 	"os/signal"
 	"syscall"
 
+	"go.uber.org/zap"
+
 	"github.com/cristianortiz/dev-forge/internal/shared/config"
 	"github.com/cristianortiz/dev-forge/internal/shared/database"
 	"github.com/cristianortiz/dev-forge/internal/shared/logger"
 	"github.com/cristianortiz/dev-forge/internal/shared/server"
-	"go.uber.org/zap"
 )
 
 func main() {
@@ -45,8 +46,9 @@ func main() {
 	srv := server.New(cfg, log)
 	server.RegisterHealthRoutes(srv.App)
 
-	// TODO: register module routes here (Phase 1+)
-	// auth.RegisterRoutes(srv.App, ...)
+	if err := registerRoutes(srv.App, db, cfg, log); err != nil {
+		log.Fatal("failed to register routes", zap.Error(err))
+	}
 
 	// ── graceful shutdown ─────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
