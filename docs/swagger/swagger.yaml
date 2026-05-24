@@ -1,0 +1,304 @@
+basePath: /api/v1
+definitions:
+  handler.createTemplateRequest:
+    properties:
+      default_params:
+        type: object
+      default_scope_config:
+        type: object
+      description:
+        type: string
+      dockerfile_template:
+        type: string
+      framework:
+        type: string
+      language:
+        type: string
+      name:
+        type: string
+      repo_template_url:
+        type: string
+      slug:
+        type: string
+    required:
+    - dockerfile_template
+    - language
+    - name
+    - slug
+    type: object
+  handler.templateResponse:
+    properties:
+      created_at:
+        type: string
+      default_params:
+        type: object
+      default_scope_config:
+        type: object
+      description:
+        type: string
+      dockerfile_template:
+        type: string
+      framework:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      language:
+        type: string
+      name:
+        type: string
+      repo_template_url:
+        type: string
+      slug:
+        type: string
+    type: object
+  handler.updateTemplateRequest:
+    properties:
+      default_params:
+        type: object
+      default_scope_config:
+        type: object
+      description:
+        type: string
+      dockerfile_template:
+        type: string
+      framework:
+        type: string
+      is_active:
+        type: boolean
+      language:
+        type: string
+      name:
+        type: string
+      repo_template_url:
+        type: string
+    type: object
+  handler.userResponse:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      role:
+        type: string
+    type: object
+info:
+  contact:
+    name: Dev Forge
+    url: https://github.com/cristianortiz/dev-forge
+  description: Internal Developer Platform — manage application templates, deployments,
+    builds and clusters.
+  license:
+    name: MIT
+  title: Dev Forge API
+  version: "1.0"
+paths:
+  /auth/me:
+    get:
+      description: Returns the profile of the currently authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.userResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get authenticated user profile
+      tags:
+      - auth
+  /templates:
+    get:
+      parameters:
+      - description: Filter by language (go, javascript, python…)
+        in: query
+        name: language
+        type: string
+      - description: Filter by framework (fiber, react, fastapi…)
+        in: query
+        name: framework
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handler.templateResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List project templates
+      tags:
+      - templates
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.createTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.templateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a project template (admin only)
+      tags:
+      - templates
+  /templates/{id}:
+    delete:
+      parameters:
+      - description: Template UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Deactivate a project template (admin only)
+      tags:
+      - templates
+    get:
+      parameters:
+      - description: Template UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.templateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a project template by ID
+      tags:
+      - templates
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.templateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a project template (admin only)
+      tags:
+      - templates
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: 'Enter the token as: Bearer <token>'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

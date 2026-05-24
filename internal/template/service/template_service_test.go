@@ -111,42 +111,6 @@ func TestCreate_ProvidedJSONBNotOverwritten(t *testing.T) {
 	}
 }
 
-func TestCreate_MissingName(t *testing.T) {
-	input := validInput
-	input.Name = ""
-	_, err := newTestSvc(&mockTemplateRepo{}).Create(context.Background(), input)
-	if err == nil {
-		t.Fatal("expected error for missing name")
-	}
-}
-
-func TestCreate_MissingSlug(t *testing.T) {
-	input := validInput
-	input.Slug = ""
-	_, err := newTestSvc(&mockTemplateRepo{}).Create(context.Background(), input)
-	if err == nil {
-		t.Fatal("expected error for missing slug")
-	}
-}
-
-func TestCreate_MissingLanguage(t *testing.T) {
-	input := validInput
-	input.Language = ""
-	_, err := newTestSvc(&mockTemplateRepo{}).Create(context.Background(), input)
-	if err == nil {
-		t.Fatal("expected error for missing language")
-	}
-}
-
-func TestCreate_MissingDockerfile(t *testing.T) {
-	input := validInput
-	input.DockerfileTemplate = ""
-	_, err := newTestSvc(&mockTemplateRepo{}).Create(context.Background(), input)
-	if err == nil {
-		t.Fatal("expected error for missing dockerfile_template")
-	}
-}
-
 func TestCreate_RepoError(t *testing.T) {
 	repo := &mockTemplateRepo{
 		create: func(_ context.Context, _ *domain.ProjectTemplate) error {

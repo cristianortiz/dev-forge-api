@@ -75,11 +75,22 @@ func GetClaims(c *fiber.Ctx) *ports.Claims {
 	return claims
 }
 
-// bearerToken extracts the token from the Authorization: Bearer <token> header.
+// bearerToken extracts the token from the Authorization header.
+// Accepts "Bearer <token>" (standard) and bare "<token>" without spaces
+// (Swagger UI apiKey sends the raw value without the Bearer prefix).
+// Values containing spaces that don't start with "Bearer " are rejected
+// so malformed schemes like "bearer abc123" or "Token abc123" are still blocked.
 func bearerToken(c *fiber.Ctx) string {
 	header := c.Get(fiber.HeaderAuthorization)
-	if !strings.HasPrefix(header, "Bearer ") {
+	if header == "" {
 		return ""
 	}
-	return strings.TrimPrefix(header, "Bearer ")
+	if rest, ok := strings.CutPrefix(header, "Bearer "); ok {
+		return rest
+	}
+	// Reject any value that contains a space but does not start with "Bearer ".
+	if strings.Contains(header, " ") {
+		return ""
+	}
+	return header
 }

@@ -145,11 +145,12 @@ func TestBearerToken(t *testing.T) {
 		want   string
 	}{
 		{"valid bearer", "Bearer abc123", "abc123"},
-		{"lowercase bearer", "bearer abc123", ""}, // implementation is case-sensitive
-		{"token scheme", "Token abc123", ""},
+		{"lowercase bearer", "bearer abc123", ""}, // has space + wrong case → rejected
+		{"token scheme", "Token abc123", ""},      // has space + wrong scheme → rejected
 		{"empty header", "", ""},
-		{"bearer only", "Bearer ", ""}, // trimmed → empty string
+		{"bearer only", "Bearer ", "Bearer"}, // HTTP strips trailing space → "Bearer" (no space → passed as bare token; auth service rejects it)
 		{"bearer with spaces", "Bearer tok en", "tok en"},
+		{"bare token", "myrawtoken123", "myrawtoken123"}, // Swagger UI apiKey format
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
