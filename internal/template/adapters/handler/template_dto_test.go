@@ -83,25 +83,26 @@ func TestCreateRequest_ToInput_NilJSONB(t *testing.T) {
 
 func TestUpdateRequest_ToInput_FieldMapping(t *testing.T) {
 	active := true
+	strPtr := func(s string) *string { return &s }
 	req := updateTemplateRequest{
-		Name:               "Updated Name",
-		Description:        "Updated description",
-		Language:           "go",
-		Framework:          "fiber",
-		DockerfileTemplate: "FROM golang:1.26",
+		Name:               strPtr("Updated Name"),
+		Description:        strPtr("Updated description"),
+		Language:           strPtr("go"),
+		Framework:          strPtr("fiber"),
+		DockerfileTemplate: strPtr("FROM golang:1.26"),
 		DefaultParams:      json.RawMessage(`{"PORT":"9090"}`),
 		DefaultScopeConfig: json.RawMessage(`{"replicas":3}`),
-		RepoTemplateURL:    "https://github.com/example/updated",
+		RepoTemplateURL:    strPtr("https://github.com/example/updated"),
 		IsActive:           &active,
 	}
 
 	input := req.toInput()
 
-	if input.Name != req.Name {
-		t.Errorf("Name = %q, want %q", input.Name, req.Name)
+	if input.Name == nil || *input.Name != *req.Name {
+		t.Errorf("Name = %v, want %q", input.Name, *req.Name)
 	}
-	if input.Description != req.Description {
-		t.Errorf("Description = %q, want %q", input.Description, req.Description)
+	if input.Description == nil || *input.Description != *req.Description {
+		t.Errorf("Description = %v, want %q", input.Description, *req.Description)
 	}
 	if input.IsActive == nil || *input.IsActive != true {
 		t.Error("IsActive should be true")

@@ -3,21 +3,22 @@ package main
 import (
 	"context"
 
+	"github.com/gofiber/adaptor/v2"
 	"github.com/gofiber/fiber/v2"
-	swagger "github.com/swaggo/fiber-swagger"
+	httpswagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
 
 	_ "github.com/cristianortiz/dev-forge/docs/swagger" // generated swagger docs
 	authhandler "github.com/cristianortiz/dev-forge/internal/auth/adapters/handler"
 	authrepo "github.com/cristianortiz/dev-forge/internal/auth/adapters/repository"
 	"github.com/cristianortiz/dev-forge/internal/auth/domain"
-	authsvc "github.com/cristianortiz/dev-forge/internal/auth/service"
+	authsvc "github.com/cristianortiz/dev-forge/internal/auth/usecase"
 	"github.com/cristianortiz/dev-forge/internal/shared/config"
 	"github.com/cristianortiz/dev-forge/internal/shared/database"
 	"github.com/cristianortiz/dev-forge/internal/shared/middleware"
 	templatehandler "github.com/cristianortiz/dev-forge/internal/template/adapters/handler"
 	templaterepo "github.com/cristianortiz/dev-forge/internal/template/adapters/repository"
-	templatesvc "github.com/cristianortiz/dev-forge/internal/template/service"
+	templatesvc "github.com/cristianortiz/dev-forge/internal/template/usecase"
 )
 
 // convenience aliases used when building role-specific middleware.
@@ -48,7 +49,7 @@ func registerRoutes(app *fiber.App, db *database.DB, cfg *config.Config, log *za
 	// ── Swagger UI ────────────────────────────────────────────────────────
 	// Available at /api/v1/docs/index.html — no auth required.
 	// Re-generate with: make swagger
-	api.Get("/docs/*", swagger.WrapHandler)
+	api.Get("/docs/*", adaptor.HTTPHandler(httpswagger.WrapHandler))
 
 	// ── Shared middleware ─────────────────────────────────────────────────
 	// authService is used both as a dependency for the auth module and as the

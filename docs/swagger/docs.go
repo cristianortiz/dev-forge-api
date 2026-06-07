@@ -218,7 +218,50 @@ const docTemplate = `{
                     }
                 }
             },
-            "put": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "templates"
+                ],
+                "summary": "Deactivate a project template (admin only)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Template UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "patch": {
                 "security": [
                     {
                         "BearerAuth": []
@@ -233,7 +276,7 @@ const docTemplate = `{
                 "tags": [
                     "templates"
                 ],
-                "summary": "Update a project template (admin only)",
+                "summary": "Partially update a project template (admin only)",
                 "parameters": [
                     {
                         "type": "string",
@@ -243,7 +286,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Fields to update",
+                        "description": "Fields to update (only sent fields are changed)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -279,49 +322,6 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "Unprocessable Entity",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "tags": [
-                    "templates"
-                ],
-                "summary": "Deactivate a project template (admin only)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Template UUID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {

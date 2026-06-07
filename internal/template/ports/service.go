@@ -22,17 +22,17 @@ type CreateTemplateInput struct {
 }
 
 // UpdateTemplateInput holds the fields that may be updated on a template.
-// Only non-zero / non-nil fields are applied (partial update semantics).
+// Only non-nil fields are applied (partial update semantics).
 type UpdateTemplateInput struct {
-	Name               string
-	Description        string
-	Language           string
-	Framework          string
-	DockerfileTemplate string
-	DefaultParams      []byte // raw JSONB
-	DefaultScopeConfig []byte // raw JSONB
-	RepoTemplateURL    string
-	IsActive           *bool // pointer to distinguish unset from explicit false
+	Name               *string
+	Description        *string
+	Language           *string
+	Framework          *string
+	DockerfileTemplate *string
+	DefaultParams      []byte // raw JSONB; nil means unchanged
+	DefaultScopeConfig []byte // raw JSONB; nil means unchanged
+	RepoTemplateURL    *string
+	IsActive           *bool
 }
 
 // TemplateService defines use cases for managing project templates.

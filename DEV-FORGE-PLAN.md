@@ -6,8 +6,8 @@
 > **Diseño y arquitectura:** [docs/DESIGN.md](docs/DESIGN.md)
 > **Schema de base de datos:** [docs/db-schema.md](docs/db-schema.md)
 
-**Última actualización:** 2026-05-23
-**Estado global:** 🔵 En progreso — Fase 1: auth ✅ + templates ✅ + seed ✅ + Swagger ✅ → próximo: app module (1.7)
+**Última actualización:** 2026-06-07
+**Estado global:** 🔵 En progreso — Fase 1: auth ✅ + templates ✅ + seed ✅ + Swagger ✅ → app module 🔵 (1.7)
 
 ---
 
@@ -91,7 +91,7 @@
 | 1.4 | Módulo `template`: domain + ports + service (CRUD) | ✅ | 2026-05-21 | 2026-05-21 | domain, ports, service + unit tests |
 | 1.5 | Módulo `template`: adapters (HTTP handlers, PostgreSQL repo) | ✅ | 2026-05-23 | 2026-05-23 | pgx repo, Fiber handler, `template_dto.go`, unit tests handler+dto |
 | 1.6 | Módulo `template`: seed inicial (Go API, React SPA, Node.js, Python) | ✅ | 2026-05-23 | 2026-05-23 | `cmd/seed/main.go`; idem potente ON CONFLICT; `make seed` |
-| 1.7 | Módulo `app`: domain + ports + service (CRUD, crear desde template) | ⬜ | — | — | Aplica defaults de template al crear |
+| 1.7 | Módulo `app`: domain + ports + service (CRUD, crear desde template) | 🔵 | 2026-06-07 | — | domain + ports creados; usecase en progreso |
 | 1.8 | Módulo `app`: adapters (HTTP handlers, PostgreSQL repo) | ⬜ | — | — | |
 | 1.9 | Módulo `git`: GitHub API (listar repos, branches) | ⬜ | — | — | Requiere GitHub token |
 | 1.10 | Migraciones SQL: users, project_templates, clusters, applications | 🔵 | 2026-05-02 | — | `000001_create_users` ✅, `000002_create_project_templates` ✅; clusters+applications pendiente |
@@ -127,7 +127,9 @@
   - Template module wired en `cmd/server/routes.go`
   - **Implementaciones adicionales (2026-05-23 — seed + Swagger):**
   - `cmd/seed/main.go`: seed de 4 templates (go-rest-api, react-spa, nodejs-express, python-fastapi); idempotente con ON CONFLICT (slug) DO NOTHING; `make seed`
-  - `cmd/server/docs.go`: anotaciones `@title`, `@BasePath`, `@securityDefinitions.apikey BearerAuth` para el API root
+  - `template/adapters/handler/template_handler.go`: 5 endpoints — PATCH en vez de PUT para update (partial update semántics)
+  - Capa `service/` renombrada a `usecase/` en todos los módulos (`auth`, `template`, `app`) — convención Clean Architecture; `*_service.go` → `*_usecase.go`
+  - `cmd/server/routes.go`: imports actualizados a `usecase/`; Swagger UI migrada a `gofiber/adaptor` + `swaggo/http-swagger` (fix assets 404)
   - `docs/swagger/`: spec generada por `swag init` (docs.go, swagger.json, swagger.yaml); `make swagger` para regenerar
   - Swagger UI montado en `GET /api/v1/docs/*` via `swaggo/fiber-swagger`; sin auth requerida
   - `swaggertype:"object"` añadido a campos `json.RawMessage` en `template_dto.go` para correcta generación de spec
@@ -334,6 +336,10 @@
 | 2026-05-21 | Estrategia de testing documentada en docs/DESIGN.md §10 (unit/integration/E2E, targets, patrones) |
 | 2026-05-21 | Tarea 1.4 completada: template domain + ports + service |
 | 2026-05-23 | Validación añadida: shared/validator (Struct puro) + shared/middleware/validation.go (ValidateBody[T], GetBody[T]) — go-playground/validator/v10 |
+| 2026-06-07 | Capa `service/` → `usecase/` en módulos auth, template, app (Clean Architecture) |
+| 2026-06-07 | Template update: PUT → PATCH (partial update semántics con `*string`) |
+| 2026-06-07 | Swagger UI: migrada a `gofiber/adaptor` + `swaggo/http-swagger` (fix assets 404) |
+| 2026-06-07 | Módulo `app`: domain + ports creados; usecase en progreso (1.7) |
 
 ---
 

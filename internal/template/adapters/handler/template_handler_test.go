@@ -336,11 +336,11 @@ func TestCreate_ServiceError_Returns500(t *testing.T) {
 	}
 }
 
-// ── PUT /templates/:id ────────────────────────────────────────────────────────
+// ── PATCH /templates/:id ────────────────────────────────────────────────────────
 
 func TestUpdate_InvalidUUID_Returns400(t *testing.T) {
 	app := newTestApp(&mockTemplateService{})
-	req := httptest.NewRequest("PUT", "/templates/not-a-uuid", bytes.NewBufferString("{}"))
+	req := httptest.NewRequest("PATCH", "/templates/not-a-uuid", bytes.NewBufferString("{}"))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
 
@@ -355,7 +355,7 @@ func TestUpdate_NotFound_Returns404(t *testing.T) {
 			return nil, domain.ErrTemplateNotFound
 		},
 	})
-	req := httptest.NewRequest("PUT", "/templates/"+uuid.New().String(), bytes.NewBufferString("{}"))
+	req := httptest.NewRequest("PATCH", "/templates/"+uuid.New().String(), bytes.NewBufferString("{}"))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
 
@@ -367,7 +367,7 @@ func TestUpdate_NotFound_Returns404(t *testing.T) {
 func TestUpdate_InvalidURL_Returns422(t *testing.T) {
 	app := newTestApp(&mockTemplateService{})
 	body := jsonBody(t, map[string]any{"repo_template_url": "not-a-url"})
-	req := httptest.NewRequest("PUT", "/templates/"+uuid.New().String(), body)
+	req := httptest.NewRequest("PATCH", "/templates/"+uuid.New().String(), body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
 
@@ -383,7 +383,7 @@ func TestUpdate_Success_Returns200(t *testing.T) {
 			return tmpl, nil
 		},
 	})
-	req := httptest.NewRequest("PUT", "/templates/"+tmpl.ID.String(), bytes.NewBufferString("{}"))
+	req := httptest.NewRequest("PATCH", "/templates/"+tmpl.ID.String(), bytes.NewBufferString("{}"))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
 
@@ -398,7 +398,7 @@ func TestUpdate_ServiceError_Returns500(t *testing.T) {
 			return nil, errors.New("db error")
 		},
 	})
-	req := httptest.NewRequest("PUT", "/templates/"+uuid.New().String(), bytes.NewBufferString("{}"))
+	req := httptest.NewRequest("PATCH", "/templates/"+uuid.New().String(), bytes.NewBufferString("{}"))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
 

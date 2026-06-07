@@ -37,7 +37,7 @@ func (h *TemplateHandler) RegisterRoutes(router fiber.Router, authMW, adminMW fi
 	g.Get("/:id", authMW, h.getByID)
 
 	g.Post("/", authMW, adminMW, middleware.ValidateBody[createTemplateRequest](), h.create)
-	g.Put("/:id", authMW, adminMW, middleware.ValidateBody[updateTemplateRequest](), h.update)
+	g.Patch("/:id", authMW, adminMW, middleware.ValidateBody[updateTemplateRequest](), h.update)
 	g.Delete("/:id", authMW, adminMW, h.deactivate)
 }
 
@@ -120,18 +120,18 @@ func (h *TemplateHandler) create(c *fiber.Ctx) error {
 }
 
 // update godoc
-// @Summary      Update a project template (admin only)
+// @Summary      Partially update a project template (admin only)
 // @Tags         templates
 // @Security     BearerAuth
 // @Accept       json
 // @Produce      json
 // @Param        id    path  string                true  "Template UUID"
-// @Param        body  body  updateTemplateRequest true  "Fields to update"
+// @Param        body  body  updateTemplateRequest true  "Fields to update (only sent fields are changed)"
 // @Success      200  {object}  templateResponse
 // @Failure      400  {object}  map[string]string
 // @Failure      404  {object}  map[string]string
 // @Failure      422  {object}  map[string]string
-// @Router       /templates/{id} [put]
+// @Router       /templates/{id} [patch]
 func (h *TemplateHandler) update(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

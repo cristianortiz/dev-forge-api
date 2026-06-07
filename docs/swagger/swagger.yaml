@@ -247,7 +247,7 @@ paths:
       summary: Get a project template by ID
       tags:
       - templates
-    put:
+    patch:
       consumes:
       - application/json
       parameters:
@@ -256,7 +256,7 @@ paths:
         name: id
         required: true
         type: string
-      - description: Fields to update
+      - description: Fields to update (only sent fields are changed)
         in: body
         name: body
         required: true
@@ -289,7 +289,7 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: Update a project template (admin only)
+      summary: Partially update a project template (admin only)
       tags:
       - templates
 schemes:

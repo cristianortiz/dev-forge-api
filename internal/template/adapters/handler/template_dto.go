@@ -38,27 +38,35 @@ func (r createTemplateRequest) toInput() ports.CreateTemplateInput {
 }
 
 // updateTemplateRequest is the JSON body for PUT /templates/:id.
+// All string fields are pointers — omitted fields are nil and left unchanged.
 type updateTemplateRequest struct {
-	Name               string          `json:"name"`
-	Description        string          `json:"description"`
-	Language           string          `json:"language"`
-	Framework          string          `json:"framework"`
-	DockerfileTemplate string          `json:"dockerfile_template"`
+	Name               *string         `json:"name"`
+	Description        *string         `json:"description"`
+	Language           *string         `json:"language"`
+	Framework          *string         `json:"framework"`
+	DockerfileTemplate *string         `json:"dockerfile_template"`
 	DefaultParams      json.RawMessage `json:"default_params"       swaggertype:"object"`
 	DefaultScopeConfig json.RawMessage `json:"default_scope_config" swaggertype:"object"`
-	RepoTemplateURL    string          `json:"repo_template_url" validate:"omitempty,url"`
+	RepoTemplateURL    *string         `json:"repo_template_url" validate:"omitempty,url"`
 	IsActive           *bool           `json:"is_active"`
 }
 
 func (r updateTemplateRequest) toInput() ports.UpdateTemplateInput {
+	var defaultParams, defaultScopeConfig []byte
+	if len(r.DefaultParams) > 0 {
+		defaultParams = []byte(r.DefaultParams)
+	}
+	if len(r.DefaultScopeConfig) > 0 {
+		defaultScopeConfig = []byte(r.DefaultScopeConfig)
+	}
 	return ports.UpdateTemplateInput{
 		Name:               r.Name,
 		Description:        r.Description,
 		Language:           r.Language,
 		Framework:          r.Framework,
 		DockerfileTemplate: r.DockerfileTemplate,
-		DefaultParams:      []byte(r.DefaultParams),
-		DefaultScopeConfig: []byte(r.DefaultScopeConfig),
+		DefaultParams:      defaultParams,
+		DefaultScopeConfig: defaultScopeConfig,
 		RepoTemplateURL:    r.RepoTemplateURL,
 		IsActive:           r.IsActive,
 	}

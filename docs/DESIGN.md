@@ -191,8 +191,8 @@ internal/<module>/
 │   ├── handler/     # HTTP handlers (inbound adapter)
 │   ├── repository/  # PostgreSQL implementation (outbound adapter)
 │   └── client/      # External API clients (outbound adapter)
-└── service/         # Use case implementations
-    └── service.go
+└── usecase/         # Use case implementations (Clean Architecture naming)
+    └── usecase.go
 ```
 
 ### Comunicación entre Módulos
@@ -200,8 +200,8 @@ internal/<module>/
 **Llamadas directas por interfaces (ports).** Sin event bus, sin REST ni gRPC entre módulos.
 
 ```go
-// Ejemplo: deploy/service/service.go
-type DeployService struct {
+// Ejemplo: deploy/usecase/deploy_usecase.go
+type DeployUseCase struct {
     approvalChecker approval.PolicyChecker  // port interface del módulo approval
     scopeProvider   scope.ScopeProvider     // port interface del módulo scope
     k8sDeployer     deploy.K8sDeployer      // port interface outbound
@@ -399,7 +399,7 @@ dev-forge-api/
 | GET | `/api/v1/templates` | Listar plantillas (filtros: language, framework) |
 | GET | `/api/v1/templates/:id` | Detalle de plantilla |
 | POST | `/api/v1/templates` | Crear plantilla (solo admin) |
-| PUT | `/api/v1/templates/:id` | Editar plantilla (solo admin) |
+| PATCH | `/api/v1/templates/:id` | Editar plantilla parcialmente (solo admin) |
 | DELETE | `/api/v1/templates/:id` | Desactivar plantilla (solo admin) |
 
 ### Applications
@@ -657,7 +657,7 @@ Enfocado en un dominio único. Provee el **chassis** de la aplicación: estructu
 
 | Categoría | Característica | Implementación |
 |---|---|---|
-| **Estructura** | Arquitectura | Hexagonal: `domain/` → `ports/` → `adapters/(handler+repository)` → `service/` |
+| **Estructura** | Arquitectura | Hexagonal: `domain/` → `ports/` → `adapters/(handler+repository)` → `usecase/` |
 | **HTTP** | Router | Fiber v2 + recovery / CORS / request-id / timeout middleware |
 | **Auth** | JWT middleware | Zitadel JWT (`shared/middleware/auth.go`) + `RequireRole` helper |
 | **Auth** | RBAC | Roles vía claims Zitadel (`urn:zitadel:iam:org:project:roles`) |
@@ -671,7 +671,7 @@ Enfocado en un dominio único. Provee el **chassis** de la aplicación: estructu
 | **Build** | Docker | Multi-stage: `golang:1.22-alpine` builder → `alpine:3.19` runtime |
 | **CI/CD** | Pipeline | GitHub Actions: test → lint → build → push image |
 | **DX** | Makefile | `dev`, `build`, `test`, `test-coverage`, `lint`, `swagger` |
-| **Testing** | Unit | `service/` + `domain/` con mocks hand-rolled (sin infra) |
+| **Testing** | Unit | `usecase/` + `domain/` con mocks hand-rolled (sin infra) |
 
 > **Infraestructura opcional**: el template incluye un directorio `adapters/repository/` con un ejemplo de repositorio in-memory. El equipo agrega pgx, Redis, gRPC, etc. según necesidad. Esto mantiene el template liviano y agnóstico al almacenamiento.
 
@@ -733,14 +733,14 @@ Los repos de `dev-forge-templates` son proyectos reales mantenidos independiente
 
 | Capa | Herramientas | Scope | Cuándo |
 |---|---|---|---|
-| **Unit** | stdlib `testing`, mocks hand-rolled | `domain/`, `service/`, `middleware/` | En cada PR, sin infra externa |
+| **Unit** | stdlib `testing`, mocks hand-rolled | `domain/`, `usecase/`, `middleware/` | En cada PR, sin infra externa |
 | **Integration** | testify + testcontainers-go | `adapters/repository/` | CI pipeline (DB real en Docker) |
 | **E2E** | curl / httptest | HTTP handlers completos | Antes de release |
 
 ### Qué se testea en unit
 
 - **`domain/`**: lógica pura — métodos de entidad, validaciones, errores de dominio
-- **`service/`**: casos de uso con `RepositoryMock` hand-rolled en `_test.go` local
+- **`usecase/`**: casos de uso con `RepositoryMock` hand-rolled en `_test.go` local
 - **`shared/middleware/`**: handlers Fiber con `fiber.App.Test()` + mock de `ports.AuthService`
 
 ### Qué NO se testea en unit (requiere integración)
@@ -767,5 +767,5 @@ Los repos de `dev-forge-templates` son proyectos reales mantenidos independiente
 - Mocks inline en `*_test.go`, **mismo package** (`package service`) — sin frameworks de generación
 - `zap.NewNop()` para logger en todos los tests
 - `context.Background()` como contexto base
-- Un archivo `_test.go` por package: `domain/X_test.go`, `service/X_test.go`, `middleware/auth_test.go`
+- Un archivo `_test.go` por package: `domain/X_test.go`, `usecase/X_test.go`, `middleware/auth_test.go`
 - Errores de dominio propagados con `errors.Is()` — los tests verifican el tipo exacto
