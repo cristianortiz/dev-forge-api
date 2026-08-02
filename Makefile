@@ -98,5 +98,16 @@ docker-clean: ## Stop containers and remove volumes (WARNING: deletes data)
 setup: docker-up migrate-up ## Start infra and apply migrations
 	@echo "Setup complete. Run 'make run' to start the server."
 
+.PHONY: seed
+seed: ## Insert built-in project templates (idempotent)
+	@set -a && . ./.env && set +a && go run ./cmd/seed/
+
+.PHONY: swagger
+swagger: ## Re-generate OpenAPI spec from handler annotations (requires swag CLI)
+	swag init \
+	  --generalInfo docs.go \
+	  --dir cmd/server,internal/template/adapters/handler,internal/auth/adapters/handler \
+	  --output docs/swagger
+
 .PHONY: reset
 reset: docker-clean docker-up migrate-up ## Reset everything (WARNING: deletes all data)
