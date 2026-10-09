@@ -1,7 +1,6 @@
 # Zitadel Setup — dev-forge API
 
-> Guía de referencia para configurar autenticación y autorización con Zitadel Cloud.
-> Nivel de producción desde el inicio: JWT Profile (sin client secrets viajando por red).
+> Guía de referencia para configurar autenticación y autorización con Zitadel Cloud. JWT Profile evita un client secret compartido en cada request, pero no sustituye la gestión, rotación y revocación de la clave privada.
 
 ---
 
@@ -56,12 +55,11 @@ En [https://dev-forge-2hcwhk.us1.zitadel.cloud/ui/console](https://dev-forge-2hc
 ### 1.3 Generar key.json para la API app
 
 1. En la app `dev-forge-api` recién creada → sección **Keys** → **+ New Key**
-2. Tipo: **JSON** | Sin fecha de expiración (o 2 años para prod) → **Add**
+2. Tipo: **JSON** | Configurar vencimiento y renovación según la política del entorno; no crear claves de duración indefinida para producción → **Add**
 3. **Descargar el JSON** → guardar como `secrets/zitadel-api-key.json`
 4. Click **Close**
 
-> ⚠️ Este JSON se descarga UNA sola vez. No tiene client secret — usa criptografía
-> de clave pública. Es seguro en el servidor, nunca va al cliente.
+> Este JSON se descarga una sola vez. Contiene una clave privada: guardarla fuera del repo y del frontend, inyectarla desde el gestor de secretos del entorno y documentar rotación/revocación antes de producción.
 
 El archivo tiene esta estructura:
 ```json
@@ -92,7 +90,7 @@ En **Settings** del proyecto:
 
 1. **Users** → **Service Users** → **+ New**
 2. Username: `dev-forge-test` | Access Token Type: **Bearer** → Create
-3. Tab **Personal Access Tokens** → **+ New** → sin expiración → copiar PAT
+3. Tab **Personal Access Tokens** → **+ New** → elegir vencimiento corto para pruebas → copiar el PAT y guardarlo solo en el entorno local ignorado por Git
 4. Tab **Metadata** (opcional) → ignorar
 
 ### 1.6 Asignar rol admin al service user
@@ -166,11 +164,13 @@ curl -s http://localhost:9000/api/v1/auth/me \
 ```json
 {
   "id": "uuid-generado",
-  "email": "",
+  "email": "<email configurado para el service user>",
   "name": "dev-forge-test",
   "role": "admin"
 }
 ```
+
+La sincronización actual persiste `email` en una columna `NOT NULL`. Por tanto, el service user de prueba debe emitir un email no vacío; la compatibilidad con identidades de máquina sin email queda pendiente de la decisión en `docs/DESIGN.md` §12.
 
 ### 3.3 Verificar sincronización en DB
 
@@ -213,7 +213,7 @@ Cuando se implemente `dev-forge-ui`, el flujo será:
 | `secrets/zitadel-api-key.json` | Private key de la API app — gitignored |
 | `secrets/.gitkeep` | Mantiene la carpeta en git |
 | `.env` | Variables de entorno locales — gitignored |
-| `internal/auth/service/auth_service.go` | Lógica de introspección |
+| `internal/auth/usecase/auth_usecase.go` | Lógica de introspección y sincronización |
 | `internal/shared/middleware/auth.go` | Middleware Fiber (Authenticated, RequireRole) |
 | `internal/auth/adapters/handler/auth_handler.go` | `GET /api/v1/auth/me` |
 | `internal/auth/adapters/repository/user_repository.go` | Sync user en PostgreSQL |
