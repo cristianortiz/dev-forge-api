@@ -79,9 +79,119 @@
 
 ---
 
-**Recorrido MVP:** crear una app desde el único blueprint soportado → validar cambios en GitHub Actions → disparar un build aislado → desplegar en un scope de desarrollo → consultar estado y logs → poder volver a un release anterior. La prioridad es cerrar ese camino; no completar una réplica de todas las capacidades de Nully.
+## Recorrido MVP — El camino que hay que cerrar
 
-**Límites iniciales:** un blueprint Go API, un cluster de homelab, sin otros runtimes, sin provisioning genérico de bases de datos y sin builds dentro del proceso API. La necesidad de PostgreSQL/secretos para el primer deploy depende de la decisión registrada en `docs/DESIGN.md` §12.
+> **Objetivo:** que un developer pase de "quiero una API nueva" a "mi API corre en Kubernetes y puedo ver su estado y volver atrás" usando solo dev-forge. La prioridad es cerrar este único camino de punta a punta; no replicar todas las capacidades de Nully.
+
+### Diagrama del flujo
+
+```mermaid
+flowchart TD
+    DEV(["👩‍💻 Developer<br/>(token Zitadel, rol developer)"])
+
+    subgraph F1["FASE 1 · Crear la aplicación"]
+        direction TB
+        A1["① Elegir blueprint publicado<br/>GET /templates<br/><i>Go API · monolito modular · versión inmutable</i>"]
+        A2["② Crear app<br/>POST /apps con template_id<br/><i>sin blueprint → 400</i>"]
+        A3["③ Reservar app en PostgreSQL<br/><i>estado: provisioning</i>"]
+        A4["④ Generar repo en GitHub<br/>desde snapshot de la versión<br/><i>token de servicio, permisos mínimos</i>"]
+        A5["⑤ Guardar repo_url<br/><i>estado: ready</i>"]
+        A1 --> A2 --> A3 --> A4 --> A5
+    end
+
+    subgraph CI["GitHub Actions · en el repo generado"]
+        direction TB
+        C1["⑥ Push / PR<br/>lint · test · build de verificación"]
+        C2{"¿Checks OK?"}
+        C1 --> C2
+    end
+
+    subgraph F2["FASE 2 · Build → Release → Deploy"]
+        direction TB
+        B1["⑦ Disparar build<br/>POST /apps/:id/builds<br/><i>commit_sha + branch</i>"]
+        B2["⑧ Runner efímero y aislado<br/><i>sin Docker socket · límites CPU/mem/tiempo/red<br/>sin credenciales del cluster</i>"]
+        B3["⑨ Imagen publicada en registry<br/><i>build: successful</i>"]
+        B4["⑩ Crear release<br/><i>semver + imagen inmutable</i>"]
+        B5["⑪ Crear scope de desarrollo<br/><i>namespace en homelab vía client-go</i>"]
+        B6["⑫ Deploy del release en el scope<br/><i>Deployment + Service en memoria, sin YAML<br/>provision → switch → finalize</i>"]
+        B1 --> B2 --> B3 --> B4 --> B6
+        B5 --> B6
+    end
+
+    subgraph OBS["Operar · consultar"]
+        direction TB
+        O1["⑬ Estado del deployment<br/><i>GET /deployments/:id · eventos</i>"]
+        O2["⑭ Logs de la app en ese scope<br/><i>GET /apps/:id/logs?scope=X</i>"]
+        O3{"¿Algo salió mal?"}
+        O4["⑮ Rollback<br/>POST rollback<br/><i>vuelve al release anterior</i>"]
+        O1 --> O3
+        O2 --> O3
+        O3 -- sí --> O4
+    end
+
+    K8S[("☸️ Homelab K8s<br/>namespace dev")]
+
+    DEV --> A1
+    A5 --> C1
+    C2 -- sí --> B1
+    C2 -- no --> FIX["Corregir y volver a hacer push"]
+    FIX --> C1
+    B6 --> K8S
+    K8S --> O1
+    K8S --> O2
+    O4 -- "re-deploy release N-1" --> B6
+    O3 -- no --> OK(["✅ App en ejecución"])
+
+    classDef done fill:#d4edda,stroke:#28a745,color:#000
+    classDef wip fill:#fff3cd,stroke:#e0a800,color:#000
+    classDef todo fill:#f8f9fa,stroke:#6c757d,color:#000
+    class A1,A2 wip
+    class A3,A4,A5,C1,B1,B2,B3,B4,B5,B6,O1,O2,O4 todo
+```
+
+> **Colores:** 🟨 en progreso (catálogo y creación de apps, Fase 1) · ⬜ sin iniciar. Auth (Zitadel) ya está completa y protege todos los pasos.
+
+### Paso a paso
+
+| # | Paso | Quién actúa | Módulo / fase | Resultado verificable |
+|---|---|---|---|---|
+| ① | Listar blueprints publicados | Developer → API | `template` · F1 (1.4–1.6) | Aparece el blueprint Go API con su versión inmutable |
+| ② | Crear app indicando `template_id` | Developer → API | `app` · F1 (1.7) | `201`; sin `template_id` → `400` |
+| ③ | Reservar la app en DB | API | `app` · F1 (1.8, 1.10) | Fila en estado `provisioning`, clave de idempotencia guardada |
+| ④ | Generar repo desde snapshot | API → GitHub | `git` · F1 (1.9) | Repo nuevo con el código del blueprint en esa versión |
+| ⑤ | Registrar `repo_url` | API | `app` · F1 (1.8) | App en `ready`; si falló entre ③ y ④, un reintento/reconciliación lo repara sin duplicar repos |
+| ⑥ | Validar cambios | GitHub Actions | Blueprint (DESIGN §10) | Lint, tests y build de verificación en verde |
+| ⑦ | Disparar build | Developer → API | `build` · F2 (2.1–2.3) | Build `pending` con commit y branch |
+| ⑧ | Construir imagen aislada | Runner efímero | `build` · F2 (2.2, 2.11) | Un build que excede límites se detiene y no toca credenciales del cluster |
+| ⑨ | Publicar imagen | Runner → registry | `build` · F2 | Build `successful` con referencia de imagen |
+| ⑩ | Crear release | Developer → API | `release` · F2 (2.4) | Versión semver ligada a esa imagen |
+| ⑪ | Crear scope de desarrollo | Developer → API | `scope` · F2 (2.5–2.6) | Namespace creado en el homelab |
+| ⑫ | Desplegar release | API → K8s | `deploy` · F2 (2.7–2.9) | Pod `running`; eventos `provision → switch → finalize` |
+| ⑬ | Consultar estado | Developer → API | `deploy` · F2 | Estado y eventos del deployment |
+| ⑭ | Consultar logs | Developer → API | `observe/logs` · F4 (4.7) | Logs autorizados solo para esa app/scope |
+| ⑮ | Rollback | Developer → API | `deploy` · F2 (2.7) | El pod vuelve al release anterior |
+
+> **Nota de secuencia:** el paso ⑭ depende de Loki (Fase 4). Hasta entonces, el MVP puede validarse con el estado del deployment (⑬); los logs en vivo se añaden al llegar a Fase 4.
+
+### Qué pasa cuando algo falla
+
+| Dónde | Fallo | Comportamiento esperado |
+|---|---|---|
+| ②–⑤ | GitHub caído o error entre DB y GitHub | La app queda en `provisioning`; el reintento es idempotente y no crea un segundo repo |
+| ⑥ | Checks en rojo | No se dispara build; se corrige y se hace push de nuevo |
+| ⑧ | Build excede tiempo, memoria o red | Se corta; build `failed`; no hay release ni deploy |
+| ⑫ | El pod no arranca | Deployment `failed`; el release anterior sigue sirviendo (si existe) |
+| ⑮ | Rollback | Se re-despliega el release N-1; no se reconstruye nada |
+
+### Lo que queda fuera del MVP
+
+Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atienden en fases posteriores:
+
+- **Un solo blueprint** (Go API, monolito modular) y **un solo cluster** (homelab). Sin otros runtimes.
+- **Sin builds dentro del proceso API**: el API solo orquesta al runner.
+- **Sin provisioning genérico de bases de datos**. Si la app necesita PostgreSQL/secretos en el primer deploy, depende de la decisión registrada en `docs/DESIGN.md` §12.
+- **Sin approvals, audit ni notificaciones** (Fase 5) ni parámetros/servicios (Fase 3) en el camino crítico.
+- **Sin frontend**: todo se recorre por la API (Swagger UI en `/api/v1/docs`).
 
 ## Fase 1: Auth (Zitadel) + Applications + Blueprints + Git ⬜
 
@@ -167,7 +277,7 @@
 | # | Tarea | Estado | Fecha inicio | Fecha fin | Notas |
 |---|---|---|---|---|---|
 | 2.1 | Módulo `build`: domain + ports + service | ⬜ | — | — | |
-| 2.2 | Módulo `build`: adapter hacia runner aislado | ⬜ | — | — | El API solo orquesta; runner efímero (BuildKit rootless o equivalente), sin Docker socket compartido, credenciales acotadas y límites de CPU/memoria/tiempo/red |
+| 2.2 | Módulo `build`: adapter hacia runner aislado | ⬜ | — | — | El API solo orquesta; runner efímero (BuildKit rootless o equivalente), sin Docker socket compartido, credenciales acotadas y límites de CPU/memoria/tiempo/red. Se desglosa en 2.2a–2.2e (ver "Cómo se desarrolla el build runner"). Diseño en `docs/DESIGN.md` §4 "Build Runner". |
 | 2.3 | Módulo `build`: HTTP handlers + PostgreSQL repo | ⬜ | — | — | |
 | 2.4 | Módulo `release`: completo (create from build, semver, list) | ⬜ | — | — | |
 | 2.5 | Módulo `scope`: domain + service (CRUD) | ⬜ | — | — | |
@@ -177,6 +287,27 @@
 | 2.9 | Módulo `deploy`: HTTP handlers | ⬜ | — | — | |
 | 2.10 | Migraciones SQL: builds, releases, scopes, deployments, deployment_events | ⬜ | — | — | |
 | 2.11 | K8s RBAC: permisos mínimos separados para API y build runner | ⬜ | — | — | El runner no hereda credenciales de despliegue; evitar ClusterRole amplio cuando basten permisos por namespace |
+
+### Cómo se desarrolla el build runner
+
+> Qué es y cómo funciona: `docs/DESIGN.md` §4 "Build Runner". El runner es un Job efímero de Kubernetes que solo construye y publica la imagen; **el despliegue lo hace el módulo `deploy` del API**. Es la pieza más riesgosa de la Fase 2 (ejecuta código no confiable), por eso se construye en capas, de menor a mayor riesgo, y cada una es verificable por separado.
+
+| Sub-tarea | Qué se construye | Se verifica con | Depende de |
+|---|---|---|---|
+| 2.2-spike | Spike: construir un Dockerfile de prueba con BuildKit rootless en el homelab (non-root, sin privileged) y publicar en el registry elegido | Imagen en el registry; anotar qué relajaciones de `seccomp`/AppArmor hicieron falta. Resuelve DESIGN §12 #9 y #10 | Acceso al cluster (0.10) |
+| 2.2a | Puerto `BuildRunner` + máquina de estados del `Build` (`pending → running → successful/failed/timed_out/cancelled`) + adaptador `fake` | Tests unitarios de transiciones, idempotencia y cancelación; sin cluster | 2.1 |
+| 2.2b | Imagen del runner (`build/runner/`): entrypoint que clona, construye, publica y escribe el *termination message* | Ejecutarla con `docker run` local contra un repo de prueba; el JSON de resultado contiene el digest | 2.2-spike |
+| 2.2c | Adaptador `k8sjob`: crea `batchv1.Job` `build-<build_id>` con objetos Go, lee estado, digest y logs, cancela | Test de integración contra el homelab (o `kind`): build real → `successful` con digest; reintento no duplica el Job | 2.2a, 2.2b, 2.11 |
+| 2.2d | Reconciler en el API: watch + resync de Jobs, cola con límite de concurrencia, borrado por TTL | Reiniciar el API a mitad de un build: el estado se recupera desde el cluster | 2.2c, 2.3 |
+| 2.2e | Endurecimiento: `NetworkPolicy`, `ResourceQuota`, `activeDeadlineSeconds`, sin token de ServiceAccount, credenciales de clone/push acotadas | Pruebas adversas del criterio de abajo | 2.2c, 2.11 |
+
+**Pruebas adversas del runner (criterio de aceptación de 2.2e):**
+- [ ] Un Dockerfile que intenta alcanzar la API de Kubernetes, PostgreSQL o el metadata del nodo falla por red.
+- [ ] Un build que excede CPU, memoria o tiempo se detiene (`timed_out`/`failed`) y libera el Job.
+- [ ] El Pod del runner no tiene token de ServiceAccount ni Docker socket montado.
+- [ ] Un build de la app A no puede escribir en el repositorio de imágenes de la app B.
+- [ ] Reintentar `POST /builds` con el mismo commit no crea un Job duplicado en ejecución.
+- [ ] Los logs del build no contienen tokens ni credenciales.
 
 **Criterios de verificación:**
 - [ ] POST trigger build → imagen construida → status `successful`
@@ -353,6 +484,7 @@
 | 2026-10-09 | Rediseñada la Fase 4: OTLP + Collector Contrib, Tempo, Prometheus, Loki y Grafana; separadas instrumentación, recolección de logs y APIs de observabilidad; añadidos criterios de resiliencia, seguridad y persistencia |
 | 2026-10-09 | Replanteada la estrategia de templates: un blueprint Go API monolito modular, versionado e inmutable; repos fuente como artefacto completo; sin configurador combinatorio ni workflows de CD duplicados |
 | 2026-10-09 | Acotado el MVP a un recorrido vertical; build runner aislado; servicios externos; estado actual separado del objetivo y decisiones pendientes centralizadas en DESIGN §12 |
+| 2026-10-10 | Documentado el build runner (Job efímero de K8s, ciclo de vida, aislamiento, contrato con el API) en DESIGN §4; desglosada la tarea 2.2 en spike + 2.2a–2.2e con pruebas adversas; añadidas decisiones §12 #9 (registry) y #10 (viabilidad de BuildKit rootless) |
 
 ---
 

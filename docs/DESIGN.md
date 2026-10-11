@@ -43,20 +43,20 @@
 
 De las 20 capturas analizadas, Nully expone estos conceptos:
 
-| Concepto Nully | Mapping en dev-forge | Simplificaciones |
-|---|---|---|
-| New Application (templates, config presets) | Application + blueprint versionado | MVP: un blueprint curado de API Go con monolito modular. No se combinan libremente arquitectura, runtime y capacidades. |
-| Application | Application | Igual |
-| Dashboard | Application Dashboard | Igual |
-| Builds | Builds | Igual |
-| Releases | Releases | Igual |
-| Deployments (traffic switch, rollback, steps) | Deployments | Traffic switching simplificado (0/100) |
-| Scopes (Environment × Country × Cloud) | Scopes | **Sin Country/Cloud** — solo Environment + Cluster |
-| Parameters (dimensional scoping, secrets) | Parameters | Scoping por environment y scope, sin cloud dimension |
-| Services (mongo-atlas, redis, postgres, links) | Service links | MVP: enlazar PostgreSQL ya existente; no aprovisionar servicios arbitrarios vía Docker |
-| Logs (real-time, structured JSON, filtros) | Observe/Logs | Logs reales vía Loki + Grafana |
-| Performance (throughput, response, CPU, mem) | Observe/Metrics | OTEL + Prometheus + Grafana (stack real, no simulado) |
-| Approvals (policies by action, request flow) | Approvals | Auto-approve dev, manual prod |
+| Concepto Nully                                 | Mapping en dev-forge               | Simplificaciones                                                                                                        |
+| ---------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| New Application (templates, config presets)    | Application + blueprint versionado | MVP: un blueprint curado de API Go con monolito modular. No se combinan libremente arquitectura, runtime y capacidades. |
+| Application                                    | Application                        | Igual                                                                                                                   |
+| Dashboard                                      | Application Dashboard              | Igual                                                                                                                   |
+| Builds                                         | Builds                             | Igual                                                                                                                   |
+| Releases                                       | Releases                           | Igual                                                                                                                   |
+| Deployments (traffic switch, rollback, steps)  | Deployments                        | Traffic switching simplificado (0/100)                                                                                  |
+| Scopes (Environment × Country × Cloud)         | Scopes                             | **Sin Country/Cloud** — solo Environment + Cluster                                                                      |
+| Parameters (dimensional scoping, secrets)      | Parameters                         | Scoping por environment y scope, sin cloud dimension                                                                    |
+| Services (mongo-atlas, redis, postgres, links) | Service links                      | MVP: enlazar PostgreSQL ya existente; no aprovisionar servicios arbitrarios vía Docker                                  |
+| Logs (real-time, structured JSON, filtros)     | Observe/Logs                       | Logs reales vía Loki + Grafana                                                                                          |
+| Performance (throughput, response, CPU, mem)   | Observe/Metrics                    | OTEL + Prometheus + Grafana (stack real, no simulado)                                                                   |
+| Approvals (policies by action, request flow)   | Approvals                          | Auto-approve dev, manual prod                                                                                           |
 
 ---
 
@@ -123,24 +123,24 @@ De las 20 capturas analizadas, Nully expone estos conceptos:
 
 ### Entidades Detalladas
 
-| # | Entidad | Campos Clave |
-|---|---|---|
-| 1 | **User** | id, zitadel_id (unique), email, name, role (admin/developer/viewer), created_at |
-| 2 | **Application** | id, name, description, repo_url, template_id (requerido en el MVP), provisioning_status, owner_id, created_at |
-| 2b | **ProjectTemplate** | id, name, slug, version, description, language, framework, source_repository, source_commit, default_params (JSONB), default_scope_config (JSONB), is_active, created_at. Cada fila identifica una versión publicada e inmutable del blueprint. |
-| 2c | **Cluster** | id, name, slug, api_endpoint, token_encrypted, ca_cert, status (active/inactive), created_at |
-| 3 | **Build** | id, app_id, description, branch, commit_sha, status (pending/building/successful/failed), docker_image, coverage, created_at |
-| 4 | **Release** | id, app_id, version (semver), build_id, status (active/superseded), created_at |
-| 5 | **Scope** | id, app_id, name, environment (dev/staging/prod), cluster_id (FK → Cluster), namespace, ram_mb, cpu_millicores, replicas, visibility (internal/public), health_check_path, status (running/stopped), created_at |
-| 6 | **Deployment** | id, release_id, scope_id, status (pending/provisioning/switching_traffic/finalized/rolled_back), created_by, created_at, updated_at |
-| 7 | **DeploymentEvent** | id, deployment_id, step, status, message, created_at |
-| 8 | **Parameter** | id, app_id, name, value_encrypted, is_secret, environment, scope_id (nullable), delivered_as (env_var/file), created_at |
-| 9 | **Service** | id, app_id, type (postgres inicialmente), name, provider, status (active/cancelled), created_at |
-| 10 | **ServiceLink** | id, service_id, scope_id, status (active/inactive), connection_params_encrypted, created_at |
-| 11 | **ApprovalPolicy** | id, app_id, action, environment, requires_approval, created_at |
-| 12 | **ApprovalRequest** | id, policy_id, resource_type, resource_id, action, status (pending/approved/rejected/cancelled), requester_id, approver_id, created_at, resolved_at |
-| 13 | **AuditLog** | id, user_id, action, resource_type, resource_id, details (JSONB), ip_address, created_at |
-| 14 | **NotificationWebhook** | id, app_id, url, events (JSONB array), is_active, secret, created_at |
+| #   | Entidad                 | Campos Clave                                                                                                                                                                                                                                    |
+| --- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **User**                | id, zitadel_id (unique), email, name, role (admin/developer/viewer), created_at                                                                                                                                                                 |
+| 2   | **Application**         | id, name, description, repo_url, template_id (requerido en el MVP), provisioning_status, owner_id, created_at                                                                                                                                   |
+| 2b  | **ProjectTemplate**     | id, name, slug, version, description, language, framework, source_repository, source_commit, default_params (JSONB), default_scope_config (JSONB), is_active, created_at. Cada fila identifica una versión publicada e inmutable del blueprint. |
+| 2c  | **Cluster**             | id, name, slug, api_endpoint, token_encrypted, ca_cert, status (active/inactive), created_at                                                                                                                                                    |
+| 3   | **Build**               | id, app_id, description, branch, commit_sha, status (pending/building/successful/failed), docker_image, coverage, created_at                                                                                                                    |
+| 4   | **Release**             | id, app_id, version (semver), build_id, status (active/superseded), created_at                                                                                                                                                                  |
+| 5   | **Scope**               | id, app_id, name, environment (dev/staging/prod), cluster_id (FK → Cluster), namespace, ram_mb, cpu_millicores, replicas, visibility (internal/public), health_check_path, status (running/stopped), created_at                                 |
+| 6   | **Deployment**          | id, release_id, scope_id, status (pending/provisioning/switching_traffic/finalized/rolled_back), created_by, created_at, updated_at                                                                                                             |
+| 7   | **DeploymentEvent**     | id, deployment_id, step, status, message, created_at                                                                                                                                                                                            |
+| 8   | **Parameter**           | id, app_id, name, value_encrypted, is_secret, environment, scope_id (nullable), delivered_as (env_var/file), created_at                                                                                                                         |
+| 9   | **Service**             | id, app_id, type (postgres inicialmente), name, provider, status (active/cancelled), created_at                                                                                                                                                 |
+| 10  | **ServiceLink**         | id, service_id, scope_id, status (active/inactive), connection_params_encrypted, created_at                                                                                                                                                     |
+| 11  | **ApprovalPolicy**      | id, app_id, action, environment, requires_approval, created_at                                                                                                                                                                                  |
+| 12  | **ApprovalRequest**     | id, policy_id, resource_type, resource_id, action, status (pending/approved/rejected/cancelled), requester_id, approver_id, created_at, resolved_at                                                                                             |
+| 13  | **AuditLog**            | id, user_id, action, resource_type, resource_id, details (JSONB), ip_address, created_at                                                                                                                                                        |
+| 14  | **NotificationWebhook** | id, app_id, url, events (JSONB array), is_active, secret, created_at                                                                                                                                                                            |
 
 ---
 
@@ -208,13 +208,13 @@ type DeployUseCase struct {
 }
 ```
 
-| Módulo | Depende de (via interfaces) | Para qué |
-|---|---|---|
-| deploy | approval, scope, release | Verificar políticas, obtener config de scope, obtener release |
-| app | template | Aplicar defaults al crear desde plantilla |
-| build | app, git | Obtener repo URL, clonar código |
-| scope | param | Propagar parámetros al crear scope |
-| observe | scope | Identificar pods por scope |
+| Módulo  | Depende de (via interfaces) | Para qué                                                      |
+| ------- | --------------------------- | ------------------------------------------------------------- |
+| deploy  | approval, scope, release    | Verificar políticas, obtener config de scope, obtener release |
+| app     | template                    | Aplicar defaults al crear desde plantilla                     |
+| build   | app, git                    | Obtener repo URL, clonar código                               |
+| scope   | param                       | Propagar parámetros al crear scope                            |
+| observe | scope                       | Identificar pods por scope                                    |
 
 ### Modelo de Auth: Zitadel (app) + K8s RBAC (cluster)
 
@@ -261,20 +261,20 @@ rules:
 
 ### Abstracción de K8s — Las apps no tienen manifests ni CD propio
 
-El repositorio generado contiene el código, Dockerfile y CI de validación que pertenecen a la aplicación. No contiene manifests Kubernetes ni un workflow de CD: dev-forge conserva el control del build y del despliegue. El proceso API no construye código ni monta el socket Docker del nodo; los builds se ejecutan en un runner aislado y efímero, con permisos, recursos, tiempo y red limitados. La tecnología concreta del runner queda pendiente en la sección 12.
+El repositorio generado contiene el código, Dockerfile y CI de validación que pertenecen a la aplicación. No contiene manifests Kubernetes ni un workflow de CD: dev-forge conserva el control del build y del despliegue. El proceso API no construye código ni monta el socket Docker del nodo; los builds se ejecutan en un runner aislado y efímero, con permisos, recursos, tiempo y red limitados. El detalle del runner (qué es, dónde corre, ciclo de vida y controles) está en [Build Runner](#build-runner--cómo-se-construyen-las-imágenes); la tecnología concreta queda pendiente en la sección 12.
 
-| Recurso | De dónde sale | Cómo se aplica |
-|---|---|---|
-| **Dockerfile** | Repo versionado del blueprint | Forma parte del repo generado y se construye desde el commit exacto de la app en un runner aislado. No se guarda ni se inyecta desde PostgreSQL. |
-| **CI de aplicación** | Repo generado | Tests, lint y verificaciones de dependencias en PR; no publica ni despliega imágenes. |
-| **Build runner** | Infraestructura de dev-forge | Ejecuta builds aislados; nunca comparte el Docker socket del API ni recibe credenciales más amplias que las necesarias para publicar la imagen. |
-| **K8s Deployment** | Generado en memoria como objeto Go | `client-go` → K8s API Server |
-| **K8s Service** | Generado en memoria | `client-go` → K8s API Server |
-| **K8s Namespace** | Generado desde Scope config | `client-go` → K8s API Server |
-| **ConfigMap / Secret** | Generado desde Parameters | `client-go` → K8s API Server |
-| **Resource limits** | Scope config (DB) | Inyectado en el Deployment object |
-| **OTEL env vars** | Constantes internas | Inyectadas en el Deployment object |
-| **Prometheus annotations** | Constantes internas | Inyectadas en el Deployment metadata |
+| Recurso                    | De dónde sale                      | Cómo se aplica                                                                                                                                   |
+| -------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Dockerfile**             | Repo versionado del blueprint      | Forma parte del repo generado y se construye desde el commit exacto de la app en un runner aislado. No se guarda ni se inyecta desde PostgreSQL. |
+| **CI de aplicación**       | Repo generado                      | Tests, lint y verificaciones de dependencias en PR; no publica ni despliega imágenes.                                                            |
+| **Build runner**           | Infraestructura de dev-forge       | Ejecuta builds aislados; nunca comparte el Docker socket del API ni recibe credenciales más amplias que las necesarias para publicar la imagen.  |
+| **K8s Deployment**         | Generado en memoria como objeto Go | `client-go` → K8s API Server                                                                                                                     |
+| **K8s Service**            | Generado en memoria                | `client-go` → K8s API Server                                                                                                                     |
+| **K8s Namespace**          | Generado desde Scope config        | `client-go` → K8s API Server                                                                                                                     |
+| **ConfigMap / Secret**     | Generado desde Parameters          | `client-go` → K8s API Server                                                                                                                     |
+| **Resource limits**        | Scope config (DB)                  | Inyectado en el Deployment object                                                                                                                |
+| **OTEL env vars**          | Constantes internas                | Inyectadas en el Deployment object                                                                                                               |
+| **Prometheus annotations** | Constantes internas                | Inyectadas en el Deployment metadata                                                                                                             |
 
 Los manifests se construyen como **objetos Go tipados** (`appsv1.Deployment`, etc.), no como templates YAML:
 
@@ -311,18 +311,148 @@ func (c *K8sClient) ApplyDeployment(ctx context.Context, opts DeployOpts) error 
 }
 ```
 
+### Build Runner — Cómo se construyen las imágenes
+
+#### Qué es (y qué no es)
+
+El **build runner no es un servicio permanente ni un proceso que "dispara" cosas**. Es un **Pod efímero de Kubernetes (un `Job`) que existe solo mientras dura un build**: clona el código de la app, construye la imagen, la publica en un registry y muere. Cada build tiene su propio runner, y nada persiste entre builds.
+
+El runner **no despliega**. Hay dos responsabilidades separadas, con credenciales distintas:
+
+| Responsabilidad                                                                             | Quién la ejecuta               | Qué puede tocar                                                           |
+| ------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| **Orquestar** (crear el build, lanzar el Job, seguir su estado, crear release y deployment) | dev-forge API                  | PostgreSQL, K8s API (vía `client-go`)                                     |
+| **Construir** (código → imagen)                                                             | Runner efímero                 | Solo el repo de esa app (lectura) y el registry (escritura de esa imagen) |
+| **Desplegar** (imagen → Pod en un scope)                                                    | dev-forge API, módulo `deploy` | K8s API del scope destino                                                 |
+
+Por qué importa para el developer: el repo generado no tiene CD, no tiene credenciales de cluster ni de registry y no necesita Docker local. El developer hace `POST /builds` → `POST /releases` → `POST /deployments`; todo lo demás lo resuelve la plataforma.
+
+Por qué es un componente aparte: construir una imagen implica **ejecutar código no confiable** (el `Dockerfile` y las dependencias de la app). Si eso corriera dentro del proceso API, o con el Docker socket del nodo montado, una app maliciosa o comprometida obtendría control del control plane y del cluster.
+
+#### Dónde corre
+
+En el **mismo cluster del homelab**, en un namespace dedicado (`dev-forge-builds`), separado del namespace de la API y de los de las apps (`scopes`). El API crea los Jobs con `client-go`; el cluster los planifica en cualquier nodo disponible.
+
+```mermaid
+flowchart LR
+    DEV(["👩‍💻 Developer"])
+    GH[("GitHub<br/><i>código de la app</i>")]
+    REG[("Registry<br/><i>imágenes</i>")]
+
+    subgraph K8S["☸️ Homelab K8s"]
+        direction LR
+
+        subgraph NSAPI["namespace: dev-forge"]
+            direction TB
+            API["<b>dev-forge API</b><br/>build usecase<br/>+ reconciler"]
+            DB[("PostgreSQL<br/>tabla builds")]
+            API <--> DB
+        end
+
+        subgraph NSB["namespace: dev-forge-builds · aislado"]
+            direction TB
+            subgraph JOB["Job build-&lt;build_id&gt; · efímero"]
+                direction TB
+                INIT["<b>init</b> · git clone<br/>token solo lectura"]
+                MAIN["<b>main</b> · BuildKit rootless<br/>build + push"]
+                INIT --> MAIN
+            end
+            SEC["🔒 Sin token de K8s · sin Docker socket<br/>NetworkPolicy estricta · límites CPU/mem/tiempo"]
+        end
+    end
+
+    DEV -- "① POST /builds" --> API
+    API -- "② crea el Job<br/>(client-go)" --> INIT
+    INIT -- "③ clone commit exacto" --> GH
+    MAIN -- "④ push imagen" --> REG
+    MAIN -. "⑤ digest / error en<br/>termination message" .-> API
+    API -- "⑥ lee estado y logs,<br/>actualiza Build y borra el Job (TTL)" --> JOB
+
+    classDef api fill:#d1ecf1,stroke:#0c5460,color:#000
+    classDef runner fill:#fff3cd,stroke:#e0a800,color:#000
+    classDef ext fill:#e2e3e5,stroke:#6c757d,color:#000
+    classDef sec fill:#f8d7da,stroke:#c82333,color:#000
+    class API,DB api
+    class INIT,MAIN runner
+    class GH,REG,DEV ext
+    class SEC sec
+```
+
+> La numeración ①–⑥ coincide con la tabla "Ciclo de vida de un build". La flecha ⑤ es punteada porque el runner **no llama** al API: el API lee el resultado del estado del Pod.
+
+#### Ciclo de vida de un build
+
+| #   | Paso               | Detalle                                                                                                                                                                                                                                                                                                                        |
+| --- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ①   | Request            | `POST /api/v1/apps/:appId/builds` con `commit_sha` y `branch`. El API valida rol, existencia de la app y que el commit exista.                                                                                                                                                                                                 |
+| ②   | Registrar y lanzar | Inserta el `Build` en `pending` y crea un `Job` con nombre determinista `build-<build_id>` (idempotente: reintentar no duplica). Le pasa por variables de entorno solo: URL del repo, `commit_sha` y el tag destino de la imagen.                                                                                              |
+| ③   | Ejecutar           | Un init container clona el repo en ese commit exacto con un token de GitHub **de solo lectura y corta vida**. El contenedor principal ejecuta BuildKit rootless sobre el `Dockerfile` del repo.                                                                                                                                |
+| ④   | Publicar           | Hace `push` de la imagen a un registry con una credencial que **solo puede escribir en el repositorio de esa app**. El tag incluye el commit; el release referencia el **digest**, no un tag mutable.                                                                                                                          |
+| ⑤   | Reportar           | El runner **no llama al API ni tiene token de Kubernetes**. Escribe el resultado (`digest`, tamaño, error) en su _termination message_; el API lo lee del estado del Pod.                                                                                                                                                      |
+| ⑥   | Reconciliar        | Un reconciler en el API observa los Jobs (watch + resync periódico), actualiza el `Build` (`running` → `successful` / `failed` / `timed_out` / `cancelled`), guarda los logs del build y borra el Job (`ttlSecondsAfterFinished`). Si el API se reinicia a mitad de un build, al volver reconcilia el estado desde el cluster. |
+
+Estados del build: `pending → running → successful | failed | timed_out | cancelled`. Solo un build `successful` puede convertirse en release.
+
+#### Aislamiento y límites
+
+| Riesgo                           | Control                                                                                                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Acceso al cluster desde el build | `automountServiceAccountToken: false`; el runner usa una ServiceAccount sin permisos.                                                                              |
+| Escape al nodo                   | Sin Docker socket, sin `privileged`, sin `hostPath`/`hostNetwork`; BuildKit rootless, non-root, `seccomp` y capabilities mínimas.                                  |
+| Exfiltración o ataque lateral    | `NetworkPolicy` con egress solo a DNS, GitHub, registry y fuentes de dependencias necesarias; denegado hacia la API de K8s, PostgreSQL y otros namespaces.         |
+| Consumo excesivo                 | `requests/limits` de CPU y memoria, `activeDeadlineSeconds` (timeout duro), `ResourceQuota` y límite de builds concurrentes en el namespace.                       |
+| Credenciales filtradas           | Token de clone y credencial de push efímeros y acotados al repo de la app; nunca en logs ni en la imagen. Sin secretos de la plataforma en el namespace de builds. |
+| Residuos                         | Job con TTL; filesystem efímero; sin caché compartida entre apps (una caché compartida permitiría envenenarla).                                                    |
+| Builds que ocupan el cluster     | Cola en el API: el exceso de builds permanece `pending` en vez de crear Jobs ilimitados.                                                                           |
+
+#### Cómo se implementa en el código
+
+El módulo `build` sigue el patrón hexagonal; el runner es un puerto con dos adaptadores:
+
+```go
+// internal/build/ports/outbound.go
+type BuildRunner interface {
+    Start(ctx context.Context, spec BuildSpec) (RunRef, error) // idempotente por BuildID
+    Status(ctx context.Context, ref RunRef) (RunStatus, error) // incluye digest si terminó
+    Logs(ctx context.Context, ref RunRef) (io.ReadCloser, error)
+    Cancel(ctx context.Context, ref RunRef) error
+}
+```
+
+| Adaptador | Ubicación                                   | Uso                                                                                                       |
+| --------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `fake`    | `internal/build/adapters/client/fakerunner` | Tests unitarios y desarrollo local sin cluster: simula éxito, fallo, timeout y cancelación.               |
+| `k8sjob`  | `internal/build/adapters/client/k8sjob`     | Producción y homelab: crea el `Job` con objetos Go tipados (`batchv1.Job`), igual que `deploy`; sin YAML. |
+
+La imagen del runner (una imagen mínima con BuildKit y un pequeño _entrypoint_ que clona, construye, publica y escribe el resultado) vive en un directorio propio del repo (`build/runner/`) con su propio versionado; el API solo conoce su referencia por configuración.
+
+#### Contrato mínimo runner ↔ API
+
+| Entrada (env del Job)                              | Salida (termination message JSON)           |
+| -------------------------------------------------- | ------------------------------------------- |
+| `REPO_URL`, `COMMIT_SHA`                           | `status`: `ok` / `error`                    |
+| `IMAGE_REF` (repo + tag destino)                   | `image_digest`: `sha256:…`                  |
+| `GIT_TOKEN` (Secret de corta vida, solo lectura)   | `error_code` y mensaje corto (sin secretos) |
+| `REGISTRY_CREDENTIALS` (Secret acotado, solo push) | `duration_ms`                               |
+
+#### Decisiones que este diseño deja abiertas
+
+- **Motor de build:** BuildKit rootless es la recomendación; en Kubernetes puede requerir relajar `seccomp`/AppArmor o user namespaces. Hay que validarlo en el homelab antes de fijarlo; Kaniko queda como alternativa a evaluar, comprobando su estado de mantenimiento.
+- **Registry:** in-cluster (p. ej. `distribution`) o externo (GHCR). Ver §12 #9.
+- **Credenciales de clone:** token de instalación de una GitHub App (ver §12 #2).
+
 ### Arquitectura de Observabilidad en K8s
 
 La arquitectura separa **señales**, **recolección**, **almacenamiento** y **consulta**. Son responsabilidades distintas; Grafana no almacena telemetría y OpenTelemetry no es un backend.
 
-| Concepto | Responsabilidad en dev-forge |
-|---|---|
-| Instrumentación | SDKs OpenTelemetry generan spans y métricas; las métricas se exponen en `/metrics`. Zap escribe logs JSON a stdout. |
-| Collector | OpenTelemetry Collector Contrib como DaemonSet recibe traces OTLP, añade contexto de Kubernetes, recoge stdout/stderr y exporta traces/logs. |
-| Backend de traces | Tempo almacena y consulta traces. Recibe OTLP del Collector. |
-| Backend de métricas | Prometheus scrapea `/metrics` de las apps y métricas nativas del cluster. No hay un salto intermedio por el Collector. |
-| Backend de logs | Loki almacena logs estructurados exportados por el Collector. El logger de cada app añade IDs de trace/span cuando hay span activo; el Collector no infiere esa relación. Los IDs son campos, no labels indexados. |
-| Interfaz | Grafana consulta Tempo, Prometheus y Loki; contiene dashboards, Explore y enlaces log ↔ trace. |
+| Concepto            | Responsabilidad en dev-forge                                                                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Instrumentación     | SDKs OpenTelemetry generan spans y métricas; las métricas se exponen en `/metrics`. Zap escribe logs JSON a stdout.                                                                                                |
+| Collector           | OpenTelemetry Collector Contrib como DaemonSet recibe traces OTLP, añade contexto de Kubernetes, recoge stdout/stderr y exporta traces/logs.                                                                       |
+| Backend de traces   | Tempo almacena y consulta traces. Recibe OTLP del Collector.                                                                                                                                                       |
+| Backend de métricas | Prometheus scrapea `/metrics` de las apps y métricas nativas del cluster. No hay un salto intermedio por el Collector.                                                                                             |
+| Backend de logs     | Loki almacena logs estructurados exportados por el Collector. El logger de cada app añade IDs de trace/span cuando hay span activo; el Collector no infiere esa relación. Los IDs son campos, no labels indexados. |
+| Interfaz            | Grafana consulta Tempo, Prometheus y Loki; contiene dashboards, Explore y enlaces log ↔ trace.                                                                                                                     |
 
 ```text
 API y apps instrumentadas ── OTLP traces ────────> OpenTelemetry Collector Contrib ──> Tempo ──┐
@@ -411,136 +541,152 @@ dev-forge-api/
 Las rutas siguientes describen el contrato objetivo del producto; no todas están implementadas ni cableadas todavía. El estado ejecutable a la fecha está resumido en la sección 7 y el avance por tarea en `DEV-FORGE-PLAN.md`.
 
 ### Auth
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/auth/me` | Perfil del usuario autenticado (sync en DB al primer request) |
-| GET | `/api/v1/auth/callback` | Zitadel OIDC callback |
+
+| Method | Endpoint                | Descripción                                                   |
+| ------ | ----------------------- | ------------------------------------------------------------- |
+| GET    | `/api/v1/auth/me`       | Perfil del usuario autenticado (sync en DB al primer request) |
+| GET    | `/api/v1/auth/callback` | Zitadel OIDC callback                                         |
 
 > Login, registro, MFA gestionados por Zitadel. El frontend redirige a Zitadel Login UI y recibe el JWT.
 
 ### Project Templates
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/templates` | Listar blueprints/versiones publicadas que admiten nuevas apps |
-| GET | `/api/v1/templates/:id` | Detalle de una versión inmutable del blueprint |
-| POST | `/api/v1/templates` | Registrar una versión ya validada (solo admin/automatización de publicación) |
-| PATCH | `/api/v1/templates/:id` | Activar/desactivar una versión; no mutar su repo, commit ni contrato |
-| DELETE | `/api/v1/templates/:id` | Retirar del catálogo (soft delete); nunca borrar una versión publicada |
+
+| Method | Endpoint                | Descripción                                                                  |
+| ------ | ----------------------- | ---------------------------------------------------------------------------- |
+| GET    | `/api/v1/templates`     | Listar blueprints/versiones publicadas que admiten nuevas apps               |
+| GET    | `/api/v1/templates/:id` | Detalle de una versión inmutable del blueprint                               |
+| POST   | `/api/v1/templates`     | Registrar una versión ya validada (solo admin/automatización de publicación) |
+| PATCH  | `/api/v1/templates/:id` | Activar/desactivar una versión; no mutar su repo, commit ni contrato         |
+| DELETE | `/api/v1/templates/:id` | Retirar del catálogo (soft delete); nunca borrar una versión publicada       |
 
 ### Applications
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps` | Listar aplicaciones |
-| POST | `/api/v1/apps` | Crear aplicación desde versión activa del blueprint (`template_id` obligatorio en el MVP) |
-| GET | `/api/v1/apps/:id` | Detalle |
-| PUT | `/api/v1/apps/:id` | Actualizar |
-| DELETE | `/api/v1/apps/:id` | Eliminar |
-| GET | `/api/v1/apps/:id/dashboard` | Dashboard agregado |
+
+| Method | Endpoint                     | Descripción                                                                               |
+| ------ | ---------------------------- | ----------------------------------------------------------------------------------------- |
+| GET    | `/api/v1/apps`               | Listar aplicaciones                                                                       |
+| POST   | `/api/v1/apps`               | Crear aplicación desde versión activa del blueprint (`template_id` obligatorio en el MVP) |
+| GET    | `/api/v1/apps/:id`           | Detalle                                                                                   |
+| PUT    | `/api/v1/apps/:id`           | Actualizar                                                                                |
+| DELETE | `/api/v1/apps/:id`           | Eliminar                                                                                  |
+| GET    | `/api/v1/apps/:id/dashboard` | Dashboard agregado                                                                        |
 
 ### Builds
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps/:appId/builds` | Listar builds |
-| POST | `/api/v1/apps/:appId/builds` | Trigger build |
-| GET | `/api/v1/apps/:appId/builds/:id` | Detalle |
+
+| Method | Endpoint                         | Descripción   |
+| ------ | -------------------------------- | ------------- |
+| GET    | `/api/v1/apps/:appId/builds`     | Listar builds |
+| POST   | `/api/v1/apps/:appId/builds`     | Trigger build |
+| GET    | `/api/v1/apps/:appId/builds/:id` | Detalle       |
 
 ### Releases
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps/:appId/releases` | Listar releases |
-| POST | `/api/v1/apps/:appId/releases` | Crear release desde build |
-| GET | `/api/v1/apps/:appId/releases/:id` | Detalle |
+
+| Method | Endpoint                           | Descripción               |
+| ------ | ---------------------------------- | ------------------------- |
+| GET    | `/api/v1/apps/:appId/releases`     | Listar releases           |
+| POST   | `/api/v1/apps/:appId/releases`     | Crear release desde build |
+| GET    | `/api/v1/apps/:appId/releases/:id` | Detalle                   |
 
 ### Scopes
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps/:appId/scopes` | Listar scopes |
-| POST | `/api/v1/apps/:appId/scopes` | Crear scope |
-| GET | `/api/v1/apps/:appId/scopes/:id` | Detalle |
-| PUT | `/api/v1/apps/:appId/scopes/:id` | Editar |
-| DELETE | `/api/v1/apps/:appId/scopes/:id` | Eliminar |
+
+| Method | Endpoint                         | Descripción   |
+| ------ | -------------------------------- | ------------- |
+| GET    | `/api/v1/apps/:appId/scopes`     | Listar scopes |
+| POST   | `/api/v1/apps/:appId/scopes`     | Crear scope   |
+| GET    | `/api/v1/apps/:appId/scopes/:id` | Detalle       |
+| PUT    | `/api/v1/apps/:appId/scopes/:id` | Editar        |
+| DELETE | `/api/v1/apps/:appId/scopes/:id` | Eliminar      |
 
 ### Deployments
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps/:appId/deployments` | Listar deployments |
-| POST | `/api/v1/apps/:appId/deployments` | Crear deployment |
-| GET | `/api/v1/apps/:appId/deployments/:id` | Detalle con steps |
-| POST | `/api/v1/apps/:appId/deployments/:id/rollback` | Rollback |
-| POST | `/api/v1/apps/:appId/deployments/:id/finalize` | Finalizar |
+
+| Method | Endpoint                                       | Descripción        |
+| ------ | ---------------------------------------------- | ------------------ |
+| GET    | `/api/v1/apps/:appId/deployments`              | Listar deployments |
+| POST   | `/api/v1/apps/:appId/deployments`              | Crear deployment   |
+| GET    | `/api/v1/apps/:appId/deployments/:id`          | Detalle con steps  |
+| POST   | `/api/v1/apps/:appId/deployments/:id/rollback` | Rollback           |
+| POST   | `/api/v1/apps/:appId/deployments/:id/finalize` | Finalizar          |
 
 ### Parameters
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps/:appId/parameters` | Listar (filtros: environment, scope) |
-| POST | `/api/v1/apps/:appId/parameters` | Crear |
-| PUT | `/api/v1/apps/:appId/parameters/:id` | Editar |
-| DELETE | `/api/v1/apps/:appId/parameters/:id` | Eliminar |
+
+| Method | Endpoint                             | Descripción                          |
+| ------ | ------------------------------------ | ------------------------------------ |
+| GET    | `/api/v1/apps/:appId/parameters`     | Listar (filtros: environment, scope) |
+| POST   | `/api/v1/apps/:appId/parameters`     | Crear                                |
+| PUT    | `/api/v1/apps/:appId/parameters/:id` | Editar                               |
+| DELETE | `/api/v1/apps/:appId/parameters/:id` | Eliminar                             |
 
 ### Services
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps/:appId/services` | Listar (tabs: in_use, available, owned) |
-| POST | `/api/v1/apps/:appId/services` | Crear |
-| GET | `/api/v1/apps/:appId/services/:id` | Detalle |
-| POST | `/api/v1/apps/:appId/services/:id/links` | Crear link a scope |
-| DELETE | `/api/v1/apps/:appId/services/:id/links/:linkId` | Eliminar link |
+
+| Method | Endpoint                                         | Descripción                             |
+| ------ | ------------------------------------------------ | --------------------------------------- |
+| GET    | `/api/v1/apps/:appId/services`                   | Listar (tabs: in_use, available, owned) |
+| POST   | `/api/v1/apps/:appId/services`                   | Crear                                   |
+| GET    | `/api/v1/apps/:appId/services/:id`               | Detalle                                 |
+| POST   | `/api/v1/apps/:appId/services/:id/links`         | Crear link a scope                      |
+| DELETE | `/api/v1/apps/:appId/services/:id/links/:linkId` | Eliminar link                           |
 
 ### Observe
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps/:appId/logs` | Logs (query: scope, instance, version, date) |
-| WS | `/api/v1/apps/:appId/logs/stream` | Streaming en tiempo real |
-| GET | `/api/v1/apps/:appId/metrics` | Métricas (query: scope, period) |
+
+| Method | Endpoint                          | Descripción                                  |
+| ------ | --------------------------------- | -------------------------------------------- |
+| GET    | `/api/v1/apps/:appId/logs`        | Logs (query: scope, instance, version, date) |
+| WS     | `/api/v1/apps/:appId/logs/stream` | Streaming en tiempo real                     |
+| GET    | `/api/v1/apps/:appId/metrics`     | Métricas (query: scope, period)              |
 
 ### Approvals
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps/:appId/approvals` | Listar requests |
-| POST | `/api/v1/apps/:appId/approvals/:id/approve` | Aprobar |
-| POST | `/api/v1/apps/:appId/approvals/:id/reject` | Rechazar |
-| GET | `/api/v1/apps/:appId/approvals/policies` | Listar políticas |
-| POST | `/api/v1/apps/:appId/approvals/policies` | Crear política |
-| PUT | `/api/v1/apps/:appId/approvals/policies/:id` | Editar política |
+
+| Method | Endpoint                                     | Descripción      |
+| ------ | -------------------------------------------- | ---------------- |
+| GET    | `/api/v1/apps/:appId/approvals`              | Listar requests  |
+| POST   | `/api/v1/apps/:appId/approvals/:id/approve`  | Aprobar          |
+| POST   | `/api/v1/apps/:appId/approvals/:id/reject`   | Rechazar         |
+| GET    | `/api/v1/apps/:appId/approvals/policies`     | Listar políticas |
+| POST   | `/api/v1/apps/:appId/approvals/policies`     | Crear política   |
+| PUT    | `/api/v1/apps/:appId/approvals/policies/:id` | Editar política  |
 
 ### Audit Log
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/audit-logs` | Listar (filtros: user, resource_type, action, date) |
-| GET | `/api/v1/apps/:appId/audit-logs` | Por aplicación |
+
+| Method | Endpoint                         | Descripción                                         |
+| ------ | -------------------------------- | --------------------------------------------------- |
+| GET    | `/api/v1/audit-logs`             | Listar (filtros: user, resource_type, action, date) |
+| GET    | `/api/v1/apps/:appId/audit-logs` | Por aplicación                                      |
 
 ### Notifications
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/apps/:appId/webhooks` | Listar webhooks |
-| POST | `/api/v1/apps/:appId/webhooks` | Crear |
-| PUT | `/api/v1/apps/:appId/webhooks/:id` | Editar |
-| DELETE | `/api/v1/apps/:appId/webhooks/:id` | Eliminar |
-| POST | `/api/v1/apps/:appId/webhooks/:id/test` | Test |
+
+| Method | Endpoint                                | Descripción     |
+| ------ | --------------------------------------- | --------------- |
+| GET    | `/api/v1/apps/:appId/webhooks`          | Listar webhooks |
+| POST   | `/api/v1/apps/:appId/webhooks`          | Crear           |
+| PUT    | `/api/v1/apps/:appId/webhooks/:id`      | Editar          |
+| DELETE | `/api/v1/apps/:appId/webhooks/:id`      | Eliminar        |
+| POST   | `/api/v1/apps/:appId/webhooks/:id/test` | Test            |
 
 ### GitHub
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/github/repos` | Listar repos del usuario |
-| GET | `/api/v1/github/repos/:owner/:repo/branches` | Listar branches |
-| POST | `/api/v1/webhooks/github` | Webhook receiver (push → trigger build) |
+
+| Method | Endpoint                                     | Descripción                             |
+| ------ | -------------------------------------------- | --------------------------------------- |
+| GET    | `/api/v1/github/repos`                       | Listar repos del usuario                |
+| GET    | `/api/v1/github/repos/:owner/:repo/branches` | Listar branches                         |
+| POST   | `/api/v1/webhooks/github`                    | Webhook receiver (push → trigger build) |
 
 ### Admin (solo rol `admin`)
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/admin/clusters` | Listar clusters |
-| POST | `/api/v1/admin/clusters` | Registrar cluster |
-| GET | `/api/v1/admin/clusters/:id` | Detalle |
-| PUT | `/api/v1/admin/clusters/:id` | Editar |
-| DELETE | `/api/v1/admin/clusters/:id` | Desregistrar |
-| GET | `/api/v1/admin/users` | Listar usuarios |
-| GET | `/api/v1/admin/settings` | Configuración de plataforma |
+
+| Method | Endpoint                     | Descripción                 |
+| ------ | ---------------------------- | --------------------------- |
+| GET    | `/api/v1/admin/clusters`     | Listar clusters             |
+| POST   | `/api/v1/admin/clusters`     | Registrar cluster           |
+| GET    | `/api/v1/admin/clusters/:id` | Detalle                     |
+| PUT    | `/api/v1/admin/clusters/:id` | Editar                      |
+| DELETE | `/api/v1/admin/clusters/:id` | Desregistrar                |
+| GET    | `/api/v1/admin/users`        | Listar usuarios             |
+| GET    | `/api/v1/admin/settings`     | Configuración de plataforma |
 
 ### OpenAPI
-| Method | Endpoint | Descripción |
-|---|---|---|
-| GET | `/api/v1/docs` | Swagger UI |
-| GET | `/api/v1/docs/openapi.yaml` | OpenAPI spec |
+
+| Method | Endpoint                    | Descripción  |
+| ------ | --------------------------- | ------------ |
+| GET    | `/api/v1/docs`              | Swagger UI   |
+| GET    | `/api/v1/docs/openapi.yaml` | OpenAPI spec |
 
 ---
 
@@ -548,62 +694,69 @@ Las rutas siguientes describen el contrato objetivo del producto; no todas está
 
 El estado describe el código del repositorio a **2026-10-09**. Una fila en la arquitectura o el schema objetivo no implica que exista una integración ejecutable.
 
-| Capacidad | Estado actual | Alcance / siguiente límite |
-|---|---|---|---|
-| Auth y sincronización de usuario | Implementado | Zitadel introspection; revisar sincronización/revocación de roles antes de ampliar RBAC |
-| Catálogo de templates | Parcial, modelo legacy | CRUD y seed existen; no representan todavía versiones publicadas e inmutables |
-| Generación de repos desde blueprint | Pendiente | GitHub API y provisioning idempotente |
-| GitHub repos, branches y webhooks | Pendiente/no cableado | Integración objetivo de Fase 1 |
-| Build de imágenes | Pendiente | Requiere runner aislado; no ejecutar Docker SDK desde el proceso API |
-| Scopes y despliegue Kubernetes | Pendiente | client-go y objetos tipados son el diseño objetivo |
-| Trazas, métricas y logs centralizados | Pendiente | Objetivo de Fase 4: OTLP/Tempo, scrape Prometheus, stdout/Loki |
-| Logs de pods, approvals, audit y notifications | Pendiente | Módulos no cableados; implementar solo en el alcance definido por fase |
-| OpenAPI/Swagger | Disponible para endpoints existentes | Spec actual cubre auth/templates; regenerar al cambiar contratos |
-| Servicios y secretos | Pendiente | Definir primero conexión segura a PostgreSQL; no asumir provisioning vía Docker |
-| Frontend y self-deploy | Pendiente | Proyectos/fases posteriores; no condicionan el contrato de API |
+La lectura de la tabla es:
+
+- **Implementado:** existe código funcional en este repositorio.
+- **Parcial:** existe una base funcional, pero todavía no cubre el diseño objetivo.
+- **Pendiente:** es parte del diseño o roadmap, pero aún no está cableado.
+
+| Capacidad                                      | Situación en el repositorio                        | Qué falta o cuál es el límite actual                                               |
+| ---------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Auth y sincronización de usuario               | **Implementado**: introspection de Zitadel         | Revisar sincronización y revocación de roles antes de ampliar RBAC                 |
+| Catálogo de templates                          | **Parcial**: existen CRUD y seed del modelo legacy | Migrar a versiones publicadas e inmutables                                         |
+| Generación de repos desde blueprint            | **Pendiente**: no hay integración ejecutable       | Implementar GitHub API y provisioning idempotente                                  |
+| Repos, branches y webhooks de GitHub           | **Pendiente**: no está cableado                    | Integración prevista para la Fase 1                                                |
+| Build de imágenes                              | **Pendiente**: no hay runner conectado             | Añadir runner aislado; el proceso API no debe ejecutar Docker SDK                  |
+| Scopes y despliegue en Kubernetes              | **Pendiente**: solo está definido el diseño        | Implementar con `client-go` y objetos tipados                                      |
+| Trazas, métricas y logs centralizados          | **Pendiente**: stack no conectado                  | Instrumentar OTLP/Tempo, Prometheus y stdout/Loki en la Fase 4                     |
+| Logs de pods, approvals, audit y notifications | **Pendiente**: módulos no cableados                | Implementar únicamente dentro del alcance de cada fase                             |
+| OpenAPI/Swagger                                | **Disponible** para los endpoints existentes       | La spec actual cubre auth/templates; regenerarla al cambiar contratos              |
+| Servicios y secretos                           | **Pendiente**: no hay provisioning implementado    | Definir primero la conexión segura a PostgreSQL; no asumir provisioning vía Docker |
+| Frontend y self-deploy                         | **Pendiente**: pertenecen a fases posteriores      | No condicionan el contrato actual de la API                                        |
 
 ---
 
 ## 8. Decisiones Técnicas
 
-| Decisión | Valor | Razón |
-|---|---|---|
-| Lenguaje backend | Go | Estándar en platform engineering |
-| Patrón backend | Monolito modular | Demuestra diseño sin complejidad de microservicios |
-| Arquitectura | Hexagonal | Separación limpia dominio / puertos / adaptadores |
-| Frontend | React SPA (`dev-forge-ui`, repo separado) | Consume API via REST + WebSocket; desacoplado |
-| Base de datos | PostgreSQL | Relacional, UUID, JSONB, robusto |
-| K8s | Homelab cluster real | Dogfooding, experiencia con K8s de producción |
-| Git provider | GitHub | API madura, webhooks |
-| Tenancy | Single-tenant + RBAC (3 roles) | Suficiente para demostrar governance |
-| Auth | Zitadel Cloud (OAuth2/OIDC) | Gestor de login/MFA; la estrategia de roles, revocación y dependencia de introspection queda por cerrar |
-| RBAC aplicación | Zitadel project roles | Roles en claim JWT; sin auth propio |
-| RBAC cluster | K8s ServiceAccount + ClusterRole | Principio menor privilegio para el proceso |
-| Comunicación módulos | Interfaces directas (ports) | Hexagonal puro; sin event bus |
-| Observabilidad | OpenTelemetry + Collector Contrib + Tempo + Prometheus + Loki + Grafana | OTLP desacopla instrumentación y backend; un pipeline por señal; perfil inicial de nodo único, no HA |
-| API docs | OpenAPI/Swagger (swag) | Auto-generada desde annotations |
-| Audit trail | Tabla `audit_logs` + middleware | Trazabilidad completa |
-| Secretos | Cifrado en DB solo con clave inyectada externamente; entrega como Secret | No guardar la clave maestra en DB, repo ni imagen; definir rotación/recuperación antes de producción |
-| K8s abstraction | Objetos Go en memoria (no YAML) | Apps gestionadas sin manifests; client-go puro |
-| Ejecución de builds | Runner efímero y aislado | El API orquesta; no monta Docker socket ni ejecuta Dockerfiles de apps no confiables en su proceso |
-| Clusters | Entidad `Cluster` en DB (token encriptado) | Admin registra via API; `Scope.cluster_id` FK |
-| Router HTTP | Fiber v2 | Alto rendimiento, API limpia |
-| SQL | pgx v5 + pgxpool | Sin ORM, pool nativo, soporte otelpgx |
-| Migraciones | golang-migrate | CLI externa, archivos `.up.sql` / `.down.sql` |
-| Logger | Zap + otelzap | Structured, bridge OTEL |
-| Config | `os.Getenv` explícito | Sin dependencias externas |
-| Validación | go-playground/validator/v10 | Tags `validate:` en DTOs de ports; `middleware.ValidateBody[T]()` valida y llama `c.Next()`; `middleware.GetBody[T](c)` recupera el valor en el handler; lógica pura en `shared/validator.Struct()` |
-| Swagger | swaggo/swag | Annotations en handlers → spec + UI |
-| Testing | stdlib + testify + testcontainers-go | Tests de integración con DB real |
-| Frontend state | Por decidir (Zustand / TanStack Query) | — |
-| Frontend UI | Por decidir (shadcn/ui / MUI) | — |
-| Frontend charts | Por decidir (Recharts / Chart.js) | — |
+| Decisión             | Valor                                                                    | Razón                                                                                                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lenguaje backend     | Go                                                                       | Estándar en platform engineering                                                                                                                                                                    |
+| Patrón backend       | Monolito modular                                                         | Demuestra diseño sin complejidad de microservicios                                                                                                                                                  |
+| Arquitectura         | Hexagonal                                                                | Separación limpia dominio / puertos / adaptadores                                                                                                                                                   |
+| Frontend             | React SPA (`dev-forge-ui`, repo separado)                                | Consume API via REST + WebSocket; desacoplado                                                                                                                                                       |
+| Base de datos        | PostgreSQL                                                               | Relacional, UUID, JSONB, robusto                                                                                                                                                                    |
+| K8s                  | Homelab cluster real                                                     | Dogfooding, experiencia con K8s de producción                                                                                                                                                       |
+| Git provider         | GitHub                                                                   | API madura, webhooks                                                                                                                                                                                |
+| Tenancy              | Single-tenant + RBAC (3 roles)                                           | Suficiente para demostrar governance                                                                                                                                                                |
+| Auth                 | Zitadel Cloud (OAuth2/OIDC)                                              | Gestor de login/MFA; la estrategia de roles, revocación y dependencia de introspection queda por cerrar                                                                                             |
+| RBAC aplicación      | Zitadel project roles                                                    | Roles en claim JWT; sin auth propio                                                                                                                                                                 |
+| RBAC cluster         | K8s ServiceAccount + ClusterRole                                         | Principio menor privilegio para el proceso                                                                                                                                                          |
+| Comunicación módulos | Interfaces directas (ports)                                              | Hexagonal puro; sin event bus                                                                                                                                                                       |
+| Observabilidad       | OpenTelemetry + Collector Contrib + Tempo + Prometheus + Loki + Grafana  | OTLP desacopla instrumentación y backend; un pipeline por señal; perfil inicial de nodo único, no HA                                                                                                |
+| API docs             | OpenAPI/Swagger (swag)                                                   | Auto-generada desde annotations                                                                                                                                                                     |
+| Audit trail          | Tabla `audit_logs` + middleware                                          | Trazabilidad completa                                                                                                                                                                               |
+| Secretos             | Cifrado en DB solo con clave inyectada externamente; entrega como Secret | No guardar la clave maestra en DB, repo ni imagen; definir rotación/recuperación antes de producción                                                                                                |
+| K8s abstraction      | Objetos Go en memoria (no YAML)                                          | Apps gestionadas sin manifests; client-go puro                                                                                                                                                      |
+| Ejecución de builds  | Runner efímero y aislado                                                 | El API orquesta; no monta Docker socket ni ejecuta Dockerfiles de apps no confiables en su proceso                                                                                                  |
+| Clusters             | Entidad `Cluster` en DB (token encriptado)                               | Admin registra via API; `Scope.cluster_id` FK                                                                                                                                                       |
+| Router HTTP          | Fiber v2                                                                 | Alto rendimiento, API limpia                                                                                                                                                                        |
+| SQL                  | pgx v5 + pgxpool                                                         | Sin ORM, pool nativo, soporte otelpgx                                                                                                                                                               |
+| Migraciones          | golang-migrate                                                           | CLI externa, archivos `.up.sql` / `.down.sql`                                                                                                                                                       |
+| Logger               | Zap + otelzap                                                            | Structured, bridge OTEL                                                                                                                                                                             |
+| Config               | `os.Getenv` explícito                                                    | Sin dependencias externas                                                                                                                                                                           |
+| Validación           | go-playground/validator/v10                                              | Tags `validate:` en DTOs de ports; `middleware.ValidateBody[T]()` valida y llama `c.Next()`; `middleware.GetBody[T](c)` recupera el valor en el handler; lógica pura en `shared/validator.Struct()` |
+| Swagger              | swaggo/swag                                                              | Annotations en handlers → spec + UI                                                                                                                                                                 |
+| Testing              | stdlib + testify + testcontainers-go                                     | Tests de integración con DB real                                                                                                                                                                    |
+| Frontend state       | Por decidir (Zustand / TanStack Query)                                   | —                                                                                                                                                                                                   |
+| Frontend UI          | Por decidir (shadcn/ui / MUI)                                            | —                                                                                                                                                                                                   |
+| Frontend charts      | Por decidir (Recharts / Chart.js)                                        | —                                                                                                                                                                                                   |
 
 ---
 
 ## 9. Stack Tecnológico
 
 ### Backend
+
 - **Lenguaje:** Go 1.26
 - **Router:** Fiber v2 (`github.com/gofiber/fiber/v2`)
 - **SQL:** pgx v5 + pgxpool (`github.com/jackc/pgx/v5`)
@@ -619,14 +772,17 @@ El estado describe el código del repositorio a **2026-10-09**. Una fila en la a
 - **Testing:** stdlib + testify + testcontainers-go
 
 ### Frontend (`dev-forge-ui`)
+
 - React 18 + Vite, Zitadel OIDC (PKCE)
 - State / UI / Charts: por decidir
 - Contract: OpenAPI spec generada por el backend
 
 ### Infraestructura
+
 - PostgreSQL 16, Homelab K8s, Helm, Docker Compose, GitHub Actions; Redis fuera del MVP hasta justificarlo
 
 ### Observability Stack
+
 - Traces: OTEL SDK → OTLP → Collector Contrib → Tempo → Grafana
 - Metrics: OTEL MeterProvider con exporter Prometheus → `/metrics` → Prometheus scrape → Grafana; Prometheus también scrapea métricas del cluster
 - Logs: Zap JSON enriquecido con `trace_id`/`span_id` desde el contexto → stdout → Collector Contrib (`filelog`) → Loki → Grafana
@@ -648,17 +804,17 @@ Esta restricción reduce el costo real: cada combinación publicada se convierte
 
 El repo versionado contiene los archivos que necesita el equipo para desarrollar la aplicación:
 
-| Área | Contrato del blueprint inicial |
-|---|---|
-| Estructura | Monolito modular Go con `cmd/server`, composition root, módulos `domain/`, `ports/`, `usecase/` y `adapters/`, más un módulo de ejemplo completo. Sin microservicios ni event bus. |
-| API | Fiber, validación de requests, errores consistentes, Swagger y ejemplos de configuración. |
-| Persistencia | PostgreSQL/pgx y migraciones. Compose local provee PostgreSQL para desarrollo; Zitadel es externo (Cloud) en la configuración actual. La imagen de la app no empaqueta una DB. La conexión desplegada requiere parámetros secretos y un endpoint PostgreSQL; acordar su alcance mínimo antes del primer recorrido deployable. |
-| Runtime | Configuración externa, graceful shutdown, readiness y liveness diferenciadas. Liveness no falla porque una dependencia remota esté temporalmente caída. |
-| Contenedor | Dockerfile multi-stage, usuario no root, build reproducible, imágenes base con versiones controladas y sin secretos ni herramientas de build en la imagen final. El gate valida el Dockerfile real. |
-| Observabilidad | Logs JSON a stdout, trazas OTEL por OTLP hacia la configuración inyectada por dev-forge y métricas en `/metrics`. Sin URL de backend, credenciales ni dependencia obligatoria de que el stack de observabilidad esté disponible. |
-| Seguridad | Auth OIDC/Zitadel disponible en el chassis con health endpoints públicos; configuración mediante variables/secretos externos. Sin credenciales dentro del repo, workflow ni imagen. |
-| CI | GitHub Actions ejecuta tests, lint y verificaciones de dependencias en PR. No despliega ni publica automáticamente a un cluster. |
-| Entrega | El Dockerfile pertenece al repo; dev-forge construye y publica la imagen y es el único responsable del despliegue. No se generan manifests K8s ni un workflow de CD duplicado. |
+| Área           | Contrato del blueprint inicial                                                                                                                                                                                                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Estructura     | Monolito modular Go con `cmd/server`, composition root, módulos `domain/`, `ports/`, `usecase/` y `adapters/`, más un módulo de ejemplo completo. Sin microservicios ni event bus.                                                                                                                                            |
+| API            | Fiber, validación de requests, errores consistentes, Swagger y ejemplos de configuración.                                                                                                                                                                                                                                     |
+| Persistencia   | PostgreSQL/pgx y migraciones. Compose local provee PostgreSQL para desarrollo; Zitadel es externo (Cloud) en la configuración actual. La imagen de la app no empaqueta una DB. La conexión desplegada requiere parámetros secretos y un endpoint PostgreSQL; acordar su alcance mínimo antes del primer recorrido deployable. |
+| Runtime        | Configuración externa, graceful shutdown, readiness y liveness diferenciadas. Liveness no falla porque una dependencia remota esté temporalmente caída.                                                                                                                                                                       |
+| Contenedor     | Dockerfile multi-stage, usuario no root, build reproducible, imágenes base con versiones controladas y sin secretos ni herramientas de build en la imagen final. El gate valida el Dockerfile real.                                                                                                                           |
+| Observabilidad | Logs JSON a stdout, trazas OTEL por OTLP hacia la configuración inyectada por dev-forge y métricas en `/metrics`. Sin URL de backend, credenciales ni dependencia obligatoria de que el stack de observabilidad esté disponible.                                                                                              |
+| Seguridad      | Auth OIDC/Zitadel disponible en el chassis con health endpoints públicos; configuración mediante variables/secretos externos. Sin credenciales dentro del repo, workflow ni imagen.                                                                                                                                           |
+| CI             | GitHub Actions ejecuta tests, lint y verificaciones de dependencias en PR. No despliega ni publica automáticamente a un cluster.                                                                                                                                                                                              |
+| Entrega        | El Dockerfile pertenece al repo; dev-forge construye y publica la imagen y es el único responsable del despliegue. No se generan manifests K8s ni un workflow de CD duplicado.                                                                                                                                                |
 
 “Production-oriented baseline” significa que el scaffold aplica estas prácticas y supera pruebas automatizadas; **no** garantiza por sí solo que una aplicación concreta sea segura, escalable o apta para producción. Eso depende de sus dependencias, configuración, threat model, recursos, políticas y operación del cluster.
 
@@ -704,11 +860,11 @@ Los templates existentes de React, Node.js y Python son prototipos del seed, no 
 
 ### Capas
 
-| Capa | Herramientas | Scope | Cuándo |
-|---|---|---|---|
-| **Unit** | stdlib `testing`, mocks hand-rolled | `domain/`, `usecase/`, `middleware/` | En cada PR, sin infra externa |
-| **Integration** | testify + testcontainers-go | `adapters/repository/` | CI pipeline (DB real en Docker) |
-| **E2E** | curl / httptest | HTTP handlers completos | Antes de release |
+| Capa            | Herramientas                        | Scope                                | Cuándo                          |
+| --------------- | ----------------------------------- | ------------------------------------ | ------------------------------- |
+| **Unit**        | stdlib `testing`, mocks hand-rolled | `domain/`, `usecase/`, `middleware/` | En cada PR, sin infra externa   |
+| **Integration** | testify + testcontainers-go         | `adapters/repository/`               | CI pipeline (DB real en Docker) |
+| **E2E**         | curl / httptest                     | HTTP handlers completos              | Antes de release                |
 
 ### Qué se testea en unit
 
@@ -718,20 +874,20 @@ Los templates existentes de React, Node.js y Python son prototipos del seed, no 
 
 ### Qué NO se testea en unit (requiere integración)
 
-| Código | Razón | Cobertura alternativa |
-|---|---|---|
-| `adapters/repository/` | Requiere PostgreSQL real | Integration tests (testcontainers-go) |
+| Código                            | Razón                                      | Cobertura alternativa                                                     |
+| --------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------- |
+| `adapters/repository/`            | Requiere PostgreSQL real                   | Integration tests (testcontainers-go)                                     |
 | `auth/usecase.New`, introspection | Requiere Zitadel/configuración de key real | E2E con servidor real; cubrir sincronización de roles con tests unitarios |
-| `cmd/server/` | Wire-up — lógica mínima | Smoke test en CI |
+| `cmd/server/`                     | Wire-up — lógica mínima                    | Smoke test en CI                                                          |
 
 ### Objetivo de cobertura
 
-| Package | Target | Estado actual |
-|---|---|---|
-| `auth/domain` | ≥ 70% | 100% ✅ |
-| `auth/usecase` | ≥ 70% unitesteable¹ | 67% (introspection excluida) |
-| `template/usecase` | ≥ 70% | 86% ✅ |
-| `shared/middleware` | ≥ 70% | 100% ✅ |
+| Package             | Target              | Estado actual                |
+| ------------------- | ------------------- | ---------------------------- |
+| `auth/domain`       | ≥ 70%               | 100% ✅                      |
+| `auth/usecase`      | ≥ 70% unitesteable¹ | 67% (introspection excluida) |
+| `template/usecase`  | ≥ 70%               | 86% ✅                       |
+| `shared/middleware` | ≥ 70%               | 100% ✅                      |
 
 > ¹ `auth/usecase` excluye la inicialización del resource server y la introspection del cómputo unitario — requieren configuración/servicio Zitadel y se cubren en integración/E2E.
 
@@ -749,15 +905,17 @@ Los templates existentes de React, Node.js y Python son prototipos del seed, no 
 
 Estas preguntas son límites de diseño, no permisos implícitos para ampliar el MVP. Resolverlas antes de implementar los módulos que dependen de ellas y registrar la respuesta aquí.
 
-| # | Pregunta | Recomendación de partida | Bloquea |
-|---|---|---|---|
-| 1 | ¿Qué ejecuta los builds y con qué aislamiento? | Runner efímero con BuildKit rootless o equivalente; sin Docker socket en el API, credenciales acotadas, límites de recursos/tiempo y red restringida. | Fase 2 |
-| 2 | ¿Los repos se crean en una organización GitHub o bajo cuentas de usuarios, y qué credencial los autoriza? | GitHub App instalada solo en la organización destino, con permisos mínimos y propietario explícito. | Fase 1 |
-| 3 | ¿Zitadel es fuente de verdad de roles o los roles locales son administrables? ¿Cómo se revoca un rol en la siguiente request? | No confiar en una copia persistida que no se refresca; definir sincronización/revocación y cubrir descenso de privilegios. | Fase 1 |
-| 4 | ¿El blueprint inicial exige PostgreSQL para arrancar, o el primer deploy puede funcionar sin DB? | Mantener la dependencia opcional en el ejemplo o adelantar parámetros secretos y enlace PostgreSQL al primer recorrido deployable. | Fases 2–3 |
-| 5 | ¿dev-forge aprovisiona PostgreSQL o solo enlaza servicios ya existentes? | MVP: enlazar endpoint externo y entregar credenciales como secretos; no administrar bases con Docker desde el API. | Fase 3 |
-| 6 | ¿Cómo se protegen, rotan y recuperan la clave de cifrado y las credenciales de plataforma? | Secretos inyectados fuera de Git/DB, rotación documentada y permisos distintos para API, runner y workloads. | Fases 1–3 |
-| 7 | ¿Se requiere Redis en el MVP y en qué caso de uso concreto? | No incluirlo en Compose/Helm hasta que un flujo lo necesite. | Fase 0 / 6 |
-| 8 | ¿Dónde corre la PostgreSQL del control plane y quién prueba su backup/restore? | DB externa como opción preferida; subchart solo para homelab. Separar este ciclo de vida del PostgreSQL que usan las apps generadas. | Fase 6 |
+| #   | Pregunta                                                                                                                      | Recomendación de partida                                                                                                                                                                                              | Bloquea    |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 1   | ¿Qué ejecuta los builds y con qué aislamiento?                                                                                | Runner efímero con BuildKit rootless o equivalente; sin Docker socket en el API, credenciales acotadas, límites de recursos/tiempo y red restringida.                                                                 | Fase 2     |
+| 2   | ¿Los repos se crean en una organización GitHub o bajo cuentas de usuarios, y qué credencial los autoriza?                     | GitHub App instalada solo en la organización destino, con permisos mínimos y propietario explícito.                                                                                                                   | Fase 1     |
+| 3   | ¿Zitadel es fuente de verdad de roles o los roles locales son administrables? ¿Cómo se revoca un rol en la siguiente request? | No confiar en una copia persistida que no se refresca; definir sincronización/revocación y cubrir descenso de privilegios.                                                                                            | Fase 1     |
+| 4   | ¿El blueprint inicial exige PostgreSQL para arrancar, o el primer deploy puede funcionar sin DB?                              | Mantener la dependencia opcional en el ejemplo o adelantar parámetros secretos y enlace PostgreSQL al primer recorrido deployable.                                                                                    | Fases 2–3  |
+| 5   | ¿dev-forge aprovisiona PostgreSQL o solo enlaza servicios ya existentes?                                                      | MVP: enlazar endpoint externo y entregar credenciales como secretos; no administrar bases con Docker desde el API.                                                                                                    | Fase 3     |
+| 6   | ¿Cómo se protegen, rotan y recuperan la clave de cifrado y las credenciales de plataforma?                                    | Secretos inyectados fuera de Git/DB, rotación documentada y permisos distintos para API, runner y workloads.                                                                                                          | Fases 1–3  |
+| 7   | ¿Se requiere Redis en el MVP y en qué caso de uso concreto?                                                                   | No incluirlo en Compose/Helm hasta que un flujo lo necesite.                                                                                                                                                          | Fase 0 / 6 |
+| 8   | ¿Dónde corre la PostgreSQL del control plane y quién prueba su backup/restore?                                                | DB externa como opción preferida; subchart solo para homelab. Separar este ciclo de vida del PostgreSQL que usan las apps generadas.                                                                                  | Fase 6     |
+| 9   | ¿Qué registry almacena las imágenes y cómo lo consume el cluster?                                                             | Elegir entre registry in-cluster y externo (p. ej. GHCR); en ambos, push solo desde el runner con credencial acotada al repositorio de la app y pull con credencial de solo lectura. Referenciar imágenes por digest. | Fase 2     |
+| 10  | ¿BuildKit rootless funciona en el homelab con los controles de seguridad previstos?                                           | Spike previo: build de un Dockerfile de prueba con non-root, sin privileged y NetworkPolicy aplicada. Si no es viable, evaluar alternativa antes de implementar `k8sjob`.                                             | Fase 2     |
 
 La guía de Zitadel también debe decidir si los service users sin email son válidos: el schema actual de `users` exige email no vacío, por lo que el test PAT necesita un claim compatible o un contrato explícito para identidades de servicio.
