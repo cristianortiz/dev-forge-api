@@ -2,9 +2,11 @@
 
 > Referencia del schema PostgreSQL. La fuente de verdad real son los archivos en `migrations/`. Este documento sirve para consulta rápida sin ejecutar queries.
 
-**Última revisión:** 2026-05-01  
+**Última revisión:** 2026-10-09
 **Base de datos:** `dev_forge` (PostgreSQL 16)  
 **Nota:** Zitadel usa su propia DB `zitadel` en el mismo PostgreSQL — esas tablas son gestionadas automáticamente por Zitadel y no se tocan desde dev-forge.
+
+> **Estado del diseño de blueprints:** `project_templates` y `applications` describen aquí el schema objetivo del MVP versionado. Las migraciones actuales todavía reflejan el modelo anterior (Dockerfile en DB y sin provisioning de repo); actualizarlo es tarea 1.10 de `DEV-FORGE-PLAN.md`. No asumir que esta definición ya está aplicada.
 
 ---
 
@@ -61,19 +63,24 @@ CREATE TABLE users (
 ```sql
 CREATE TABLE project_templates (
     id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name                 VARCHAR(255) NOT NULL,         -- "Go REST API", "React SPA"
-    slug                 VARCHAR(100) UNIQUE NOT NULL,  -- "go-rest-api", "react-spa"
-    description          TEXT,
-    language             VARCHAR(50) NOT NULL,          -- "go", "javascript", "python"
-    framework            VARCHAR(100),                  -- "fiber", "react", "fastapi"
-    dockerfile_template  TEXT NOT NULL,                 -- contenido del Dockerfile
-    default_params       JSONB DEFAULT '{}',            -- env vars por defecto
-    default_scope_config JSONB DEFAULT '{}',            -- RAM, CPU, replicas, health check
-    repo_template_url    VARCHAR(500),                  -- GitHub template repo (opcional)
+    name                 VARCHAR(255) NOT NULL,         -- "Go API — Modular Monolith"
+    slug                 VARCHAR(100) NOT NULL,         -- identidad estable: "go-modular-monolith"
+    version              VARCHAR(50) NOT NULL,          -- versión publicada del scaffold: "v1.0.0"
+    description          TEXT NOT NULL DEFAULT '',
+    language             VARCHAR(50) NOT NULL,          -- "go"
+    framework            VARCHAR(100) NOT NULL,         -- "fiber"
+    source_repository    VARCHAR(500),                  -- snapshot GitHub Template Repository de esta versión
+    source_commit        CHAR(40),                      -- SHA del contenido publicado
+    default_params       JSONB NOT NULL DEFAULT '{}',   -- solo configuración no sensible
+    default_scope_config JSONB NOT NULL DEFAULT '{}',   -- recursos/probes sugeridos; ajustables por scope
     is_active            BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (slug, version),
+    CHECK (NOT is_active OR (source_repository IS NOT NULL AND source_commit IS NOT NULL))
 );
 ```
+
+Cada versión publicable es inmutable. `is_active = FALSE` la oculta para nuevas apps, pero no debe borrarse ni cambiar su repo/commit si alguna `application` la referencia. Las columnas de fuente solo pueden ser nulas en filas históricas inactivas; el endpoint de catálogo nunca devuelve una versión sin fuente verificable. `default_params` no admite secretos ni credenciales.
 
 ### `clusters`
 ```sql
@@ -92,15 +99,24 @@ CREATE TABLE clusters (
 ### `applications`
 ```sql
 CREATE TABLE applications (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        VARCHAR(255) UNIQUE NOT NULL,
-    description TEXT,
-    repo_url    VARCHAR(500),
-    template_id UUID REFERENCES project_templates(id), -- NULL si no usa template
-    owner_id    UUID NOT NULL REFERENCES users(id),
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name               VARCHAR(255) UNIQUE NOT NULL,
+    description        TEXT,
+    repo_url           VARCHAR(500),
+    template_id        UUID NOT NULL REFERENCES project_templates(id), -- versión exacta; obligatoria en el MVP
+    owner_id           UUID NOT NULL REFERENCES users(id),
+    provisioning_status VARCHAR(20) NOT NULL DEFAULT 'provisioning', -- provisioning | ready | failed
+    idempotency_key    UUID UNIQUE,                            -- evita duplicar repos al reintentar POST /apps
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (provisioning_status <> 'ready' OR repo_url IS NOT NULL)
 );
 ```
+
+Para crear desde blueprint, reservar la app con estado `provisioning` y una clave de idempotencia antes de llamar a GitHub. Marcar `ready` solo cuando el repo exista y se haya guardado `repo_url`. Como PostgreSQL y GitHub no comparten transacción, los reintentos deben reconciliar el repo determinístico existente; no guardar tokens de GitHub ni errores remotos sensibles en esta tabla. El MVP no admite apps sin blueprint.
+
+### Evolución desde la migración actual
+
+La migración de `project_templates` debe agregar `version`, `source_repository` y `source_commit`, reemplazar la unicidad global de `slug` por `(slug, version)` y eliminar `dockerfile_template` cuando ningún build lo consuma. Las filas históricas del seed que no tengan repo/commit real reciben una versión legacy y se conservan inactivas, nunca seleccionables. El nuevo seed publica una sola versión validada del blueprint Go monolito modular. Añadir `provisioning_status` e `idempotency_key` antes de cablear la generación de repos en `POST /apps`.
 
 ### `builds`
 ```sql
@@ -198,7 +214,7 @@ CREATE TABLE parameters (
 CREATE TABLE services (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     app_id     UUID NOT NULL REFERENCES applications(id),
-    type       VARCHAR(50) NOT NULL,   -- postgres | redis | mongo
+    type       VARCHAR(50) NOT NULL,   -- postgres en el MVP; otros tipos requieren provider y gates propios
     name       VARCHAR(255) NOT NULL,
     provider   VARCHAR(100),
     status     VARCHAR(20) NOT NULL DEFAULT 'active', -- active | cancelled
@@ -285,23 +301,17 @@ CREATE TABLE notification_webhooks (
 
 ## Migraciones
 
-Los archivos viven en `migrations/` con el formato de golang-migrate:
+Los archivos existentes en `migrations/` usan el formato de golang-migrate:
 
 ```
 migrations/
 ├── 000001_create_users.up.sql
 ├── 000001_create_users.down.sql
-├── 000002_create_templates_and_clusters.up.sql
-├── 000002_create_templates_and_clusters.down.sql
-├── 000003_create_apps_builds_releases.up.sql    ← Fase 1 (tarea 1.10)
-├── 000003_create_apps_builds_releases.down.sql
-├── 000004_create_scopes_deployments.up.sql      ← Fase 2 (tarea 2.10)
-├── 000004_create_scopes_deployments.down.sql
-├── 000005_create_parameters_services.up.sql     ← Fase 3 (tarea 3.6)
-├── 000005_create_parameters_services.down.sql
-├── 000006_create_approval_audit_webhooks.up.sql ← Fase 5 (tarea 5.8)
-└── 000006_create_approval_audit_webhooks.down.sql
+├── 000002_create_project_templates.up.sql       ← modelo legacy
+└── 000002_create_project_templates.down.sql
 ```
+
+La definición de las tablas de este documento es el **schema objetivo**, no el estado aplicado. La siguiente migración de Fase 1 debe evolucionar `project_templates` y crear `applications`; Fase 2 agrega clusters, builds, releases, scopes y deployments; Fase 3 agrega parámetros y enlaces a servicios externos; Fase 5 agrega approvals, audit y webhooks. Nombrar/versionar cada archivo al implementarlo, sin mantener una lista de rutas futuras que pueda confundirse con archivos existentes.
 
 ```bash
 # Comandos

@@ -78,7 +78,7 @@ migrate-force: ## Force migration version (usage: make migrate-force version=1)
 COMPOSE_FILE := deployments/docker-compose.yml
 
 .PHONY: docker-up
-docker-up: ## Start all infra (PostgreSQL, Redis, Zitadel)
+docker-up: ## Start local PostgreSQL (Zitadel is external)
 	docker compose -f $(COMPOSE_FILE) up -d
 
 .PHONY: docker-down

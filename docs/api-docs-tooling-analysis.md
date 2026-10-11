@@ -1,5 +1,7 @@
 # Análisis: Herramienta de documentación de API
 
+> **Estado:** documento de alternativas, no decisión aprobada. La UI Swagger actual ya está disponible; no migrar su presentación mientras se está rediseñando el contrato de templates y apps.
+
 ## Estado actual
 
 - `swaggo/swag` genera OpenAPI 2.0 (Swagger) desde comentarios `@...` en handlers.
@@ -17,13 +19,13 @@
 | **huma** (framework)                 | Genera OpenAPI 3.1 automático desde structs Go (sin anotaciones) | Sí, automático                | Integra Scalar/Stoplight          | **Alto** (requiere reescribir handlers sobre huma o wrapper) | Mejor DX a largo plazo, pero acopla el router                               |
 | **ogen / oapi-codegen** (spec-first) | Vos escribís YAML/JSON OpenAPI 3.1 a mano, se genera código      | —                             | Cualquiera (Scalar/Redoc)         | Alto                                                         | Cambia el flujo a "spec primero", más disciplina pero cero desincronización |
 
-## Recomendación
+## Recomendación vigente (2026-10-09)
 
-**Fase 1 (rápida, bajo riesgo):** mantener `swaggo/swag` como generador (ya funciona, solo hay que regenerar con `make swagger` y revisar anotaciones faltantes en handlers de `app`, `template`, `auth`), y **reemplazar solo la UI** por **Scalar** vía su paquete Go embebido (`github.com/MarceloPetrucio/go-scalar-api-reference` o servir el HTML estático de `@scalar/api-reference` apuntando al `swagger.json` ya generado).
+Mantener `swaggo/swag` y la UI existente por ahora. La prioridad es que la spec generada describa fielmente los endpoints implementados y que el contrato objetivo se estabilice con la generación de apps y blueprints versionados. Después se puede evaluar Scalar como cambio solo de UI; no aporta valor al camino MVP si la spec y los endpoints siguen cambiando.
 
-**Fase 2 (opcional, futuro):** si se busca eliminar anotaciones manuales por completo, migrar a **huma** — pero implica reescribir el binding de request/response de cada handler, no es trivial con Fiber (huma tiene adapter para Fiber vía `humafiber`). Evaluar solo si el dolor de mantener anotaciones se vuelve recurrente.
+No migrar ahora a Huma ni a generación spec-first: ambos alteran el flujo de desarrollo y no resuelven el aislamiento de responsabilidades del producto. Reconsiderar solo si mantener anotaciones o generar clientes se convierte en un problema comprobado.
 
-## Estimación de costo (Fase 1: Swagger UI → Scalar)
+## Estimación histórica: alternativa Scalar
 
 | Tarea                                                                                                       | Esfuerzo       |
 | ----------------------------------------------------------------------------------------------------------- | -------------- |
