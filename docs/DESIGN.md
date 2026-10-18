@@ -739,7 +739,7 @@ La lectura de la tabla es:
 | K8s abstraction      | Objetos Go en memoria (no YAML)                                          | Apps gestionadas sin manifests; client-go puro                                                                                                                                                      |
 | Ejecución de builds  | Runner efímero y aislado                                                 | El API orquesta; no monta Docker socket ni ejecuta Dockerfiles de apps no confiables en su proceso                                                                                                  |
 | Clusters             | Entidad `Cluster` en DB (token encriptado)                               | Admin registra via API; `Scope.cluster_id` FK                                                                                                                                                       |
-| Router HTTP          | Fiber v2                                                                 | Alto rendimiento, API limpia                                                                                                                                                                        |
+| Router HTTP          | Fiber v3                                                                 | Alto rendimiento, API limpia; ver [plan de migración](./fiber-v3-migration.md)                                                                                                                       |
 | SQL                  | pgx v5 + pgxpool                                                         | Sin ORM, pool nativo, soporte otelpgx                                                                                                                                                               |
 | Migraciones          | golang-migrate                                                           | CLI externa, archivos `.up.sql` / `.down.sql`                                                                                                                                                       |
 | Logger               | Zap + otelzap                                                            | Structured, bridge OTEL                                                                                                                                                                             |
@@ -758,7 +758,7 @@ La lectura de la tabla es:
 ### Backend
 
 - **Lenguaje:** Go 1.26
-- **Router:** Fiber v2 (`github.com/gofiber/fiber/v2`)
+- **Router:** Fiber v3 (`github.com/gofiber/fiber/v3`)
 - **SQL:** pgx v5 + pgxpool (`github.com/jackc/pgx/v5`)
 - **Migraciones:** golang-migrate
 - **Logger:** Zap (`go.uber.org/zap`) + otelzap

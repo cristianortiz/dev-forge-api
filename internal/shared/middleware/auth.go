@@ -3,7 +3,7 @@ package middleware
 import (
 	"strings"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"go.uber.org/zap"
 
 	"github.com/cristianortiz/dev-forge/internal/auth/domain"
@@ -19,19 +19,19 @@ const (
 // Authenticated validates the Bearer token and syncs the user to the DB.
 // On success it stores *domain.User and *ports.Claims in Fiber locals.
 func Authenticated(authSvc ports.AuthService, logger *zap.Logger) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		rawToken := bearerToken(c)
 		if rawToken == "" {
 			return fiber.NewError(fiber.StatusUnauthorized, "missing authorization header")
 		}
 
-		claims, err := authSvc.ValidateToken(c.Context(), rawToken)
+		claims, err := authSvc.ValidateToken(c.RequestCtx(), rawToken)
 		if err != nil {
 			logger.Debug("token validation failed", zap.Error(err))
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
 		}
 
-		user, err := authSvc.SyncUser(c.Context(), claims)
+		user, err := authSvc.SyncUser(c.RequestCtx(), claims)
 		if err != nil {
 			logger.Error("user sync failed", zap.Error(err))
 			return fiber.NewError(fiber.StatusInternalServerError, "internal error")
@@ -50,7 +50,7 @@ func RequireRole(roles ...domain.Role) fiber.Handler {
 	for _, r := range roles {
 		allowed[r] = struct{}{}
 	}
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		user := GetUser(c)
 		if user == nil {
 			return fiber.NewError(fiber.StatusUnauthorized, "not authenticated")
@@ -64,13 +64,13 @@ func RequireRole(roles ...domain.Role) fiber.Handler {
 
 // GetUser retrieves the authenticated user from the Fiber context.
 // Returns nil if Authenticated middleware was not called.
-func GetUser(c *fiber.Ctx) *domain.User {
+func GetUser(c fiber.Ctx) *domain.User {
 	user, _ := c.Locals(LocalsUser).(*domain.User)
 	return user
 }
 
 // GetClaims retrieves the JWT claims from the Fiber context.
-func GetClaims(c *fiber.Ctx) *ports.Claims {
+func GetClaims(c fiber.Ctx) *ports.Claims {
 	claims, _ := c.Locals(LocalsClaims).(*ports.Claims)
 	return claims
 }
@@ -80,7 +80,7 @@ func GetClaims(c *fiber.Ctx) *ports.Claims {
 // (Swagger UI apiKey sends the raw value without the Bearer prefix).
 // Values containing spaces that don't start with "Bearer " are rejected
 // so malformed schemes like "bearer abc123" or "Token abc123" are still blocked.
-func bearerToken(c *fiber.Ctx) string {
+func bearerToken(c fiber.Ctx) string {
 	header := c.Get(fiber.HeaderAuthorization)
 	if header == "" {
 		return ""
@@ -94,3 +94,5 @@ func bearerToken(c *fiber.Ctx) string {
 	}
 	return header
 }
+
+// fiber:context-methods migrated

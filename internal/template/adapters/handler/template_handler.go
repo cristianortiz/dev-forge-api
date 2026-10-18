@@ -3,7 +3,7 @@ package handler
 import (
 	"errors"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
@@ -51,12 +51,12 @@ func (h *TemplateHandler) RegisterRoutes(router fiber.Router, authMW, adminMW fi
 // @Success      200  {array}   templateResponse
 // @Failure      500  {object}  map[string]string
 // @Router       /templates [get]
-func (h *TemplateHandler) list(c *fiber.Ctx) error {
+func (h *TemplateHandler) list(c fiber.Ctx) error {
 	filter := ports.ListTemplatesFilter{
 		Language:  c.Query("language"),
 		Framework: c.Query("framework"),
 	}
-	templates, err := h.svc.List(c.Context(), filter)
+	templates, err := h.svc.List(c.RequestCtx(), filter)
 	if err != nil {
 		h.logger.Error("list templates", zap.Error(err))
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to list templates")
@@ -78,12 +78,12 @@ func (h *TemplateHandler) list(c *fiber.Ctx) error {
 // @Failure      400  {object}  map[string]string
 // @Failure      404  {object}  map[string]string
 // @Router       /templates/{id} [get]
-func (h *TemplateHandler) getByID(c *fiber.Ctx) error {
+func (h *TemplateHandler) getByID(c fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid template id")
 	}
-	t, err := h.svc.GetByID(c.Context(), id)
+	t, err := h.svc.GetByID(c.RequestCtx(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrTemplateNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, "template not found")
@@ -106,9 +106,9 @@ func (h *TemplateHandler) getByID(c *fiber.Ctx) error {
 // @Failure      409  {object}  map[string]string
 // @Failure      422  {object}  map[string]string
 // @Router       /templates [post]
-func (h *TemplateHandler) create(c *fiber.Ctx) error {
+func (h *TemplateHandler) create(c fiber.Ctx) error {
 	req := middleware.GetBody[createTemplateRequest](c)
-	t, err := h.svc.Create(c.Context(), req.toInput())
+	t, err := h.svc.Create(c.RequestCtx(), req.toInput())
 	if err != nil {
 		if errors.Is(err, domain.ErrSlugAlreadyExists) {
 			return fiber.NewError(fiber.StatusConflict, "slug already exists")
@@ -132,13 +132,13 @@ func (h *TemplateHandler) create(c *fiber.Ctx) error {
 // @Failure      404  {object}  map[string]string
 // @Failure      422  {object}  map[string]string
 // @Router       /templates/{id} [patch]
-func (h *TemplateHandler) update(c *fiber.Ctx) error {
+func (h *TemplateHandler) update(c fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid template id")
 	}
 	req := middleware.GetBody[updateTemplateRequest](c)
-	t, err := h.svc.Update(c.Context(), id, req.toInput())
+	t, err := h.svc.Update(c.RequestCtx(), id, req.toInput())
 	if err != nil {
 		if errors.Is(err, domain.ErrTemplateNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, "template not found")
@@ -158,12 +158,12 @@ func (h *TemplateHandler) update(c *fiber.Ctx) error {
 // @Failure      400  {object}  map[string]string
 // @Failure      404  {object}  map[string]string
 // @Router       /templates/{id} [delete]
-func (h *TemplateHandler) deactivate(c *fiber.Ctx) error {
+func (h *TemplateHandler) deactivate(c fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid template id")
 	}
-	if err := h.svc.Deactivate(c.Context(), id); err != nil {
+	if err := h.svc.Deactivate(c.RequestCtx(), id); err != nil {
 		if errors.Is(err, domain.ErrTemplateNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, "template not found")
 		}
@@ -172,3 +172,5 @@ func (h *TemplateHandler) deactivate(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }
+
+// fiber:context-methods migrated

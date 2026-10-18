@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"go.uber.org/zap"
 
 	"github.com/cristianortiz/dev-forge/internal/auth/ports"
@@ -35,7 +35,7 @@ func (h *AuthHandler) RegisterRoutes(router fiber.Router, authMW fiber.Handler) 
 // @Success      200  {object}  userResponse
 // @Failure      401  {object}  map[string]string
 // @Router       /auth/me [get]
-func (h *AuthHandler) getMe(c *fiber.Ctx) error {
+func (h *AuthHandler) getMe(c fiber.Ctx) error {
 	user := middleware.GetUser(c)
 	return c.JSON(userResponse{
 		ID:    user.ID.String(),

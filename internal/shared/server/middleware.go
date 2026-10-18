@@ -3,13 +3,13 @@ package server
 import (
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"go.uber.org/zap"
 )
 
 // zapLogger returns a Fiber middleware that logs each request with zap.
 func zapLogger(logger *zap.Logger) fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		start := time.Now()
 		err := c.Next()
 		duration := time.Since(start)
@@ -35,7 +35,7 @@ func zapLogger(logger *zap.Logger) fiber.Handler {
 
 // defaultErrorHandler converts errors into a consistent JSON response.
 func defaultErrorHandler(logger *zap.Logger) fiber.ErrorHandler {
-	return func(c *fiber.Ctx, err error) error {
+	return func(c fiber.Ctx, err error) error {
 		code := fiber.StatusInternalServerError
 		message := "internal server error"
 
