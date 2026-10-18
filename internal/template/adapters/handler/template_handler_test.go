@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
@@ -44,14 +44,14 @@ func (m *mockTemplateService) Deactivate(ctx context.Context, id uuid.UUID) erro
 }
 
 // passThrough is a no-op middleware that allows all requests through.
-var passThrough = func(c *fiber.Ctx) error { return c.Next() }
+var passThrough = func(c fiber.Ctx) error { return c.Next() }
 
 // newTestApp builds a Fiber app with the template handler registered.
 // authMW and adminMW are replaced with passThrough so tests focus on handler logic.
 func newTestApp(svc ports.TemplateService) *fiber.App {
 	app := fiber.New(fiber.Config{
 		// Return errors as JSON for easier assertion.
-		ErrorHandler: func(c *fiber.Ctx, err error) error {
+		ErrorHandler: func(c fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			var fe *fiber.Error
 			if errors.As(err, &fe) {

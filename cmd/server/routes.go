@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	"github.com/gofiber/adaptor/v2"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/adaptor"
 	httpswagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
 

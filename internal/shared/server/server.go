@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/cristianortiz/dev-forge/internal/shared/config"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/gofiber/fiber/v2/middleware/requestid"
+	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/gofiber/fiber/v3/middleware/recover"
+	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"go.uber.org/zap"
 )
 
@@ -29,9 +29,9 @@ func New(cfg *config.Config, logger *zap.Logger) *Server {
 	app.Use(requestid.New())
 	app.Use(recover.New(recover.Config{EnableStackTrace: cfg.Debug}))
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders: "Origin,Content-Type,Accept,Authorization,X-Request-ID",
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"},
 	}))
 	app.Use(zapLogger(logger))
 

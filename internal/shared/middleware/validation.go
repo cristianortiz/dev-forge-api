@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 
 	"github.com/cristianortiz/dev-forge/internal/shared/validator"
 )
@@ -24,9 +24,9 @@ const bodyKey bodyContextKey = "validated_body"
 //	templates.Post("/", middleware.ValidateBody[ports.CreateTemplateInput](), h.Create)
 //	templates.Put("/:id", middleware.ValidateBody[ports.UpdateTemplateInput](), h.Update)
 func ValidateBody[T any]() fiber.Handler {
-	return func(c *fiber.Ctx) error {
+	return func(c fiber.Ctx) error {
 		var input T
-		if err := c.BodyParser(&input); err != nil {
+		if err := c.Bind().Body(&input); err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, "invalid JSON body")
 		}
 		if err := validator.Struct(input); err != nil {
@@ -39,6 +39,6 @@ func ValidateBody[T any]() fiber.Handler {
 
 // GetBody retrieves the validated body stored by ValidateBody[T].
 // Must be called inside a handler that was preceded by ValidateBody[T] on the same route.
-func GetBody[T any](c *fiber.Ctx) T {
+func GetBody[T any](c fiber.Ctx) T {
 	return c.Locals(bodyKey).(T)
 }

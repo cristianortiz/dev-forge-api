@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
@@ -40,7 +40,7 @@ func (m *mockAuthService) GetUserByID(ctx context.Context, id string) (*domain.U
 
 func TestAuthenticated_MissingToken(t *testing.T) {
 	app := fiber.New()
-	app.Get("/", Authenticated(&mockAuthService{}, zap.NewNop()), func(c *fiber.Ctx) error {
+	app.Get("/", Authenticated(&mockAuthService{}, zap.NewNop()), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 	req := httptest.NewRequest("GET", "/", nil)
@@ -60,7 +60,7 @@ func TestAuthenticated_InvalidToken(t *testing.T) {
 		},
 	}
 	app := fiber.New()
-	app.Get("/", Authenticated(svc, zap.NewNop()), func(c *fiber.Ctx) error {
+	app.Get("/", Authenticated(svc, zap.NewNop()), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 	req := httptest.NewRequest("GET", "/", nil)
@@ -84,7 +84,7 @@ func TestAuthenticated_SyncUserError(t *testing.T) {
 		},
 	}
 	app := fiber.New()
-	app.Get("/", Authenticated(svc, zap.NewNop()), func(c *fiber.Ctx) error {
+	app.Get("/", Authenticated(svc, zap.NewNop()), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 	req := httptest.NewRequest("GET", "/", nil)
@@ -113,7 +113,7 @@ func TestAuthenticated_Success(t *testing.T) {
 		gotClaims *ports.Claims
 	)
 	app := fiber.New()
-	app.Get("/", Authenticated(svc, zap.NewNop()), func(c *fiber.Ctx) error {
+	app.Get("/", Authenticated(svc, zap.NewNop()), func(c fiber.Ctx) error {
 		gotUser = GetUser(c)
 		gotClaims = GetClaims(c)
 		return c.SendStatus(fiber.StatusOK)
@@ -156,7 +156,7 @@ func TestBearerToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			app := fiber.New()
 			var got string
-			app.Get("/", func(c *fiber.Ctx) error {
+			app.Get("/", func(c fiber.Ctx) error {
 				got = bearerToken(c)
 				return c.SendStatus(fiber.StatusOK)
 			})
@@ -182,7 +182,7 @@ func TestGetUser_SetInLocals(t *testing.T) {
 	user := &domain.User{ID: id, Role: domain.RoleAdmin}
 	var got *domain.User
 
-	app.Get("/", func(c *fiber.Ctx) error {
+	app.Get("/", func(c fiber.Ctx) error {
 		c.Locals(LocalsUser, user)
 		got = GetUser(c)
 		return c.SendStatus(fiber.StatusOK)
@@ -201,7 +201,7 @@ func TestGetUser_NotSet_ReturnsNil(t *testing.T) {
 	app := fiber.New()
 	var got *domain.User
 
-	app.Get("/", func(c *fiber.Ctx) error {
+	app.Get("/", func(c fiber.Ctx) error {
 		got = GetUser(c)
 		return c.SendStatus(fiber.StatusOK)
 	})
@@ -220,7 +220,7 @@ func TestGetClaims_SetInLocals(t *testing.T) {
 	claims := &ports.Claims{ZitadelID: "z1", Email: "a@b.com"}
 	var got *ports.Claims
 
-	app.Get("/", func(c *fiber.Ctx) error {
+	app.Get("/", func(c fiber.Ctx) error {
 		c.Locals(LocalsClaims, claims)
 		got = GetClaims(c)
 		return c.SendStatus(fiber.StatusOK)
@@ -239,7 +239,7 @@ func TestGetClaims_NotSet_ReturnsNil(t *testing.T) {
 	app := fiber.New()
 	var got *ports.Claims
 
-	app.Get("/", func(c *fiber.Ctx) error {
+	app.Get("/", func(c fiber.Ctx) error {
 		got = GetClaims(c)
 		return c.SendStatus(fiber.StatusOK)
 	})
@@ -258,12 +258,12 @@ func TestGetClaims_NotSet_ReturnsNil(t *testing.T) {
 func TestRequireRole_AllowedRole(t *testing.T) {
 	app := fiber.New()
 	app.Get("/",
-		func(c *fiber.Ctx) error {
+		func(c fiber.Ctx) error {
 			c.Locals(LocalsUser, &domain.User{Role: domain.RoleAdmin})
 			return c.Next()
 		},
 		RequireRole(domain.RoleAdmin),
-		func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
+		func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
 	)
 	req := httptest.NewRequest("GET", "/", nil)
 	resp, err := app.Test(req)
@@ -278,12 +278,12 @@ func TestRequireRole_AllowedRole(t *testing.T) {
 func TestRequireRole_ForbiddenRole(t *testing.T) {
 	app := fiber.New()
 	app.Get("/",
-		func(c *fiber.Ctx) error {
+		func(c fiber.Ctx) error {
 			c.Locals(LocalsUser, &domain.User{Role: domain.RoleViewer})
 			return c.Next()
 		},
 		RequireRole(domain.RoleAdmin),
-		func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
+		func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
 	)
 	req := httptest.NewRequest("GET", "/", nil)
 	resp, err := app.Test(req)
@@ -299,7 +299,7 @@ func TestRequireRole_NoUserInContext(t *testing.T) {
 	app := fiber.New()
 	app.Get("/",
 		RequireRole(domain.RoleAdmin),
-		func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
+		func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
 	)
 	req := httptest.NewRequest("GET", "/", nil)
 	resp, err := app.Test(req)
@@ -316,12 +316,12 @@ func TestRequireRole_MultipleRolesAllowed(t *testing.T) {
 		t.Run(string(role), func(t *testing.T) {
 			app := fiber.New()
 			app.Get("/",
-				func(c *fiber.Ctx) error {
+				func(c fiber.Ctx) error {
 					c.Locals(LocalsUser, &domain.User{Role: role})
 					return c.Next()
 				},
 				RequireRole(domain.RoleAdmin, domain.RoleDeveloper),
-				func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
+				func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
 			)
 			req := httptest.NewRequest("GET", "/", nil)
 			resp, err := app.Test(req)
@@ -338,12 +338,12 @@ func TestRequireRole_MultipleRolesAllowed(t *testing.T) {
 func TestRequireRole_ViewerExcludedFromMultiple(t *testing.T) {
 	app := fiber.New()
 	app.Get("/",
-		func(c *fiber.Ctx) error {
+		func(c fiber.Ctx) error {
 			c.Locals(LocalsUser, &domain.User{Role: domain.RoleViewer})
 			return c.Next()
 		},
 		RequireRole(domain.RoleAdmin, domain.RoleDeveloper),
-		func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
+		func(c fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) },
 	)
 	req := httptest.NewRequest("GET", "/", nil)
 	resp, err := app.Test(req)
