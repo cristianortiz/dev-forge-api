@@ -102,12 +102,13 @@ setup: docker-up migrate-up ## Start infra and apply migrations
 seed: ## Insert built-in project templates (idempotent)
 	@set -a && . ./.env && set +a && go run ./cmd/seed/
 
-.PHONY: swagger
-swagger: ## Re-generate OpenAPI spec from handler annotations (requires swag CLI)
-	swag init \
-	  --generalInfo docs.go \
-	  --dir cmd/server,internal/template/adapters/handler,internal/auth/adapters/handler \
-	  --output docs/swagger
+.PHONY: openapi-lint
+openapi-lint: ## Lint the canonical OpenAPI contract (Vacuum v0.33.1)
+	go run github.com/daveshanley/vacuum@v0.33.1 lint docs/openapi/openapi.yaml
+
+.PHONY: openapi-check
+openapi-check: openapi-lint ## Lint the contract and test its served representation
+	go test ./cmd/server ./docs/openapi
 
 .PHONY: reset
 reset: docker-clean docker-up migrate-up ## Reset everything (WARNING: deletes all data)

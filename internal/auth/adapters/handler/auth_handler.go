@@ -26,15 +26,6 @@ func (h *AuthHandler) RegisterRoutes(router fiber.Router, authMW fiber.Handler) 
 	auth.Get("/me", authMW, h.getMe)
 }
 
-// getMe godoc
-// @Summary      Get authenticated user profile
-// @Description  Returns the profile of the currently authenticated user.
-// @Tags         auth
-// @Produce      json
-// @Security     BearerAuth
-// @Success      200  {object}  userResponse
-// @Failure      401  {object}  map[string]string
-// @Router       /auth/me [get]
 func (h *AuthHandler) getMe(c fiber.Ctx) error {
 	user := middleware.GetUser(c)
 	return c.JSON(userResponse{

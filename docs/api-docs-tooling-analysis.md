@@ -1,12 +1,19 @@
-# Análisis: Herramienta de documentación de API
+# Análisis histórico: Herramientas de documentación de API
 
-> **Estado:** documento de alternativas, no decisión aprobada. La UI Swagger actual ya está disponible; no migrar su presentación mientras se está rediseñando el contrato de templates y apps.
+> **Estado:** análisis histórico. La recomendación de mantener `swaggo` y las anotaciones fue superada el 2026-10-18 por el plan [OpenAPI 3 + Scalar](./openapi-scalar-migration-plan.md), que propone YAML contract-first y retirar las anotaciones de los handlers. La tabla de alternativas se conserva como antecedente.
 
-## Estado actual
+## Baseline antes de la migración
 
 - `swaggo/swag` genera OpenAPI 2.0 (Swagger) desde comentarios `@...` en handlers.
 - `swaggo/http-swagger` sirve la UI clásica de Swagger en `/api/v1/docs/*`.
 - Problema: anotaciones manuales se desincronizan del código (ya desactualizado), UI Swagger es visualmente anticuada, sin soporte nativo OpenAPI 3.1.
+
+## Estado tras la migración
+
+- La fuente de verdad es `docs/openapi/openapi.yaml` (OpenAPI 3.2.0); se sirve en `/api/v1/openapi.yaml`.
+- Scalar se sirve en `/api/v1/docs` con el bundle local y modo offline.
+- Las anotaciones de documentación Go y los artefactos Swagger 2 generados fueron retirados.
+- El plan vigente y el detalle de validación están en [OpenAPI 3 + Scalar](./openapi-scalar-migration-plan.md).
 
 ## Opciones modernas evaluadas
 
@@ -19,7 +26,7 @@
 | **huma** (framework)                 | Genera OpenAPI 3.1 automático desde structs Go (sin anotaciones) | Sí, automático                | Integra Scalar/Stoplight          | **Alto** (requiere reescribir handlers sobre huma o wrapper) | Mejor DX a largo plazo, pero acopla el router                               |
 | **ogen / oapi-codegen** (spec-first) | Vos escribís YAML/JSON OpenAPI 3.1 a mano, se genera código      | —                             | Cualquiera (Scalar/Redoc)         | Alto                                                         | Cambia el flujo a "spec primero", más disciplina pero cero desincronización |
 
-## Recomendación vigente (2026-10-09)
+## Recomendación histórica (superada el 2026-10-18)
 
 Mantener `swaggo/swag` y la UI existente por ahora. La prioridad es que la spec generada describa fielmente los endpoints implementados y que el contrato objetivo se estabilice con la generación de apps y blueprints versionados. Después se puede evaluar Scalar como cambio solo de UI; no aporta valor al camino MVP si la spec y los endpoints siguen cambiando.
 

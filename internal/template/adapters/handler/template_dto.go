@@ -18,8 +18,8 @@ type createTemplateRequest struct {
 	Language           string          `json:"language"            validate:"required"`
 	Framework          string          `json:"framework"`
 	DockerfileTemplate string          `json:"dockerfile_template" validate:"required"`
-	DefaultParams      json.RawMessage `json:"default_params"       swaggertype:"object"`
-	DefaultScopeConfig json.RawMessage `json:"default_scope_config" swaggertype:"object"`
+	DefaultParams      json.RawMessage `json:"default_params"`
+	DefaultScopeConfig json.RawMessage `json:"default_scope_config"`
 	RepoTemplateURL    string          `json:"repo_template_url"    validate:"omitempty,url"`
 }
 
@@ -45,8 +45,8 @@ type updateTemplateRequest struct {
 	Language           *string         `json:"language"`
 	Framework          *string         `json:"framework"`
 	DockerfileTemplate *string         `json:"dockerfile_template"`
-	DefaultParams      json.RawMessage `json:"default_params"       swaggertype:"object"`
-	DefaultScopeConfig json.RawMessage `json:"default_scope_config" swaggertype:"object"`
+	DefaultParams      json.RawMessage `json:"default_params"`
+	DefaultScopeConfig json.RawMessage `json:"default_scope_config"`
 	RepoTemplateURL    *string         `json:"repo_template_url" validate:"omitempty,url"`
 	IsActive           *bool           `json:"is_active"`
 }
@@ -83,8 +83,8 @@ type templateResponse struct {
 	Language           string          `json:"language"`
 	Framework          string          `json:"framework"`
 	DockerfileTemplate string          `json:"dockerfile_template"`
-	DefaultParams      json.RawMessage `json:"default_params"       swaggertype:"object"`
-	DefaultScopeConfig json.RawMessage `json:"default_scope_config" swaggertype:"object"`
+	DefaultParams      json.RawMessage `json:"default_params"`
+	DefaultScopeConfig json.RawMessage `json:"default_scope_config"`
 	RepoTemplateURL    string          `json:"repo_template_url"`
 	IsActive           bool            `json:"is_active"`
 	CreatedAt          string          `json:"created_at"`

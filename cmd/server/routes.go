@@ -4,11 +4,8 @@ import (
 	"context"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/gofiber/fiber/v3/middleware/adaptor"
-	httpswagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
 
-	_ "github.com/cristianortiz/dev-forge/docs/swagger" // generated swagger docs
 	authhandler "github.com/cristianortiz/dev-forge/internal/auth/adapters/handler"
 	authrepo "github.com/cristianortiz/dev-forge/internal/auth/adapters/repository"
 	"github.com/cristianortiz/dev-forge/internal/auth/domain"
@@ -46,10 +43,11 @@ const (
 func registerRoutes(app *fiber.App, db *database.DB, cfg *config.Config, log *zap.Logger) error {
 	api := app.Group("/api/v1")
 
-	// ── Swagger UI ────────────────────────────────────────────────────────
-	// Available at /api/v1/docs/index.html — no auth required.
-	// Re-generate with: make swagger
-	api.Get("/docs/*", adaptor.HTTPHandler(httpswagger.WrapHandler))
+	// ── API documentation ──────────────────────────────────────────────────
+	// Scalar UI and the canonical OpenAPI contract are public.
+	if err := registerDocsRoutes(api); err != nil {
+		return err
+	}
 
 	// ── Shared middleware ─────────────────────────────────────────────────
 	// authService is used both as a dependency for the auth module and as the
@@ -66,12 +64,12 @@ func registerRoutes(app *fiber.App, db *database.DB, cfg *config.Config, log *za
 	adminMW := middleware.RequireRole(roleAdmin)
 
 	// ── Phase 1: Auth ─────────────────────────────────────────────────────
-	// Endpoints: POST /auth/sync, GET /auth/me, GET /auth/users/:id
+	// Endpoint: GET /auth/me
 	authhandler.New(authService, log).RegisterRoutes(api, authMW)
 
 	// ── Phase 1: Templates ────────────────────────────────────────────────
 	// Endpoints: GET /templates, GET /templates/:id (all roles)
-	//            POST /templates, PUT /templates/:id, DELETE /templates/:id (admin only)
+	//            POST /templates, PATCH /templates/:id, DELETE /templates/:id (admin only)
 	templatehandler.New(
 		templatesvc.New(templaterepo.New(db), log),
 		log,
