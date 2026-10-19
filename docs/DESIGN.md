@@ -528,7 +528,7 @@ dev-forge-api/
 ├── docs/
 │   ├── DESIGN.md          # Este archivo
 │   ├── db-schema.md       # Schema SQL de referencia
-│   └── openapi.yaml       # OpenAPI spec (auto-generada por swag)
+│   └── openapi.yaml       # Contrato OpenAPI 3.2 canónico
 ├── scripts/               # seed, demo
 ├── Makefile
 └── DEV-FORGE-PLAN.md      # Tracking de tareas y estado de fases
@@ -685,8 +685,8 @@ Las rutas siguientes describen el contrato objetivo del producto; no todas está
 
 | Method | Endpoint                    | Descripción  |
 | ------ | --------------------------- | ------------ |
-| GET    | `/api/v1/docs`              | Swagger UI   |
-| GET    | `/api/v1/docs/openapi.yaml` | OpenAPI spec |
+| GET    | `/api/v1/docs`              | Scalar API Reference |
+| GET    | `/api/v1/openapi.yaml`      | Contrato OpenAPI 3.2 canónico |
 
 ---
 
@@ -710,7 +710,7 @@ La lectura de la tabla es:
 | Scopes y despliegue en Kubernetes              | **Pendiente**: solo está definido el diseño        | Implementar con `client-go` y objetos tipados                                      |
 | Trazas, métricas y logs centralizados          | **Pendiente**: stack no conectado                  | Instrumentar OTLP/Tempo, Prometheus y stdout/Loki en la Fase 4                     |
 | Logs de pods, approvals, audit y notifications | **Pendiente**: módulos no cableados                | Implementar únicamente dentro del alcance de cada fase                             |
-| OpenAPI/Swagger                                | **Disponible** para los endpoints existentes       | La spec actual cubre auth/templates; regenerarla al cambiar contratos              |
+| OpenAPI 3.2 + Scalar                           | **Disponible** para los endpoints existentes       | Contrato canónico en YAML; lint y pruebas con `make openapi-check`                 |
 | Servicios y secretos                           | **Pendiente**: no hay provisioning implementado    | Definir primero la conexión segura a PostgreSQL; no asumir provisioning vía Docker |
 | Frontend y self-deploy                         | **Pendiente**: pertenecen a fases posteriores      | No condicionan el contrato actual de la API                                        |
 
@@ -733,7 +733,7 @@ La lectura de la tabla es:
 | RBAC cluster         | K8s ServiceAccount + ClusterRole                                         | Principio menor privilegio para el proceso                                                                                                                                                          |
 | Comunicación módulos | Interfaces directas (ports)                                              | Hexagonal puro; sin event bus                                                                                                                                                                       |
 | Observabilidad       | OpenTelemetry + Collector Contrib + Tempo + Prometheus + Loki + Grafana  | OTLP desacopla instrumentación y backend; un pipeline por señal; perfil inicial de nodo único, no HA                                                                                                |
-| API docs             | OpenAPI/Swagger (swag)                                                   | Auto-generada desde annotations                                                                                                                                                                     |
+| API docs             | OpenAPI 3.2 YAML + Scalar                                                | Contract-first; Scalar renderiza el contrato y el API sirve el mismo YAML                                                                                                                         |
 | Audit trail          | Tabla `audit_logs` + middleware                                          | Trazabilidad completa                                                                                                                                                                               |
 | Secretos             | Cifrado en DB solo con clave inyectada externamente; entrega como Secret | No guardar la clave maestra en DB, repo ni imagen; definir rotación/recuperación antes de producción                                                                                                |
 | K8s abstraction      | Objetos Go en memoria (no YAML)                                          | Apps gestionadas sin manifests; client-go puro                                                                                                                                                      |
@@ -745,7 +745,7 @@ La lectura de la tabla es:
 | Logger               | Zap + otelzap                                                            | Structured, bridge OTEL                                                                                                                                                                             |
 | Config               | `os.Getenv` explícito                                                    | Sin dependencias externas                                                                                                                                                                           |
 | Validación           | go-playground/validator/v10                                              | Tags `validate:` en DTOs de ports; `middleware.ValidateBody[T]()` valida y llama `c.Next()`; `middleware.GetBody[T](c)` recupera el valor en el handler; lógica pura en `shared/validator.Struct()` |
-| Swagger              | swaggo/swag                                                              | Annotations en handlers → spec + UI                                                                                                                                                                 |
+| OpenAPI / Scalar      | `docs/openapi/openapi.yaml` + `gofiber-scalar`                           | YAML explícito → Scalar; sin anotaciones de documentación en handlers                                                                                                                              |
 | Testing              | stdlib + testify + testcontainers-go                                     | Tests de integración con DB real                                                                                                                                                                    |
 | Frontend state       | Por decidir (Zustand / TanStack Query)                                   | —                                                                                                                                                                                                   |
 | Frontend UI          | Por decidir (shadcn/ui / MUI)                                            | —                                                                                                                                                                                                   |
@@ -768,7 +768,7 @@ La lectura de la tabla es:
 - **Builds:** runner aislado (BuildKit rootless o equivalente; elección pendiente)
 - **K8s:** client-go (`k8s.io/client-go`)
 - **Telemetry:** OTEL SDK (`go.opentelemetry.io/otel`)
-- **API docs:** swag (`github.com/swaggo/swag`)
+- **API docs:** contrato OpenAPI 3.2 en `docs/openapi/openapi.yaml`; Scalar servido en `/api/v1/docs`
 - **Testing:** stdlib + testify + testcontainers-go
 
 ### Frontend (`dev-forge-ui`)
@@ -807,7 +807,7 @@ El repo versionado contiene los archivos que necesita el equipo para desarrollar
 | Área           | Contrato del blueprint inicial                                                                                                                                                                                                                                                                                                |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Estructura     | Monolito modular Go con `cmd/server`, composition root, módulos `domain/`, `ports/`, `usecase/` y `adapters/`, más un módulo de ejemplo completo. Sin microservicios ni event bus.                                                                                                                                            |
-| API            | Fiber, validación de requests, errores consistentes, Swagger y ejemplos de configuración.                                                                                                                                                                                                                                     |
+| API            | Fiber, validación de requests, errores consistentes, OpenAPI 3.2 + Scalar y ejemplos de configuración.                                                                                                                                                                                                                        |
 | Persistencia   | PostgreSQL/pgx y migraciones. Compose local provee PostgreSQL para desarrollo; Zitadel es externo (Cloud) en la configuración actual. La imagen de la app no empaqueta una DB. La conexión desplegada requiere parámetros secretos y un endpoint PostgreSQL; acordar su alcance mínimo antes del primer recorrido deployable. |
 | Runtime        | Configuración externa, graceful shutdown, readiness y liveness diferenciadas. Liveness no falla porque una dependencia remota esté temporalmente caída.                                                                                                                                                                       |
 | Contenedor     | Dockerfile multi-stage, usuario no root, build reproducible, imágenes base con versiones controladas y sin secretos ni herramientas de build en la imagen final. El gate valida el Dockerfile real.                                                                                                                           |

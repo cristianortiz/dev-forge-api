@@ -41,16 +41,6 @@ func (h *TemplateHandler) RegisterRoutes(router fiber.Router, authMW, adminMW fi
 	g.Delete("/:id", authMW, adminMW, h.deactivate)
 }
 
-// list godoc
-// @Summary      List project templates
-// @Tags         templates
-// @Security     BearerAuth
-// @Produce      json
-// @Param        language   query  string  false  "Filter by language (go, javascript, python…)"
-// @Param        framework  query  string  false  "Filter by framework (fiber, react, fastapi…)"
-// @Success      200  {array}   templateResponse
-// @Failure      500  {object}  map[string]string
-// @Router       /templates [get]
 func (h *TemplateHandler) list(c fiber.Ctx) error {
 	filter := ports.ListTemplatesFilter{
 		Language:  c.Query("language"),
@@ -68,16 +58,6 @@ func (h *TemplateHandler) list(c fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// getByID godoc
-// @Summary      Get a project template by ID
-// @Tags         templates
-// @Security     BearerAuth
-// @Produce      json
-// @Param        id   path  string  true  "Template UUID"
-// @Success      200  {object}  templateResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
-// @Router       /templates/{id} [get]
 func (h *TemplateHandler) getByID(c fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -94,18 +74,6 @@ func (h *TemplateHandler) getByID(c fiber.Ctx) error {
 	return c.JSON(toResponse(t))
 }
 
-// create godoc
-// @Summary      Create a project template (admin only)
-// @Tags         templates
-// @Security     BearerAuth
-// @Accept       json
-// @Produce      json
-// @Param        body  body  createTemplateRequest  true  "Template data"
-// @Success      201  {object}  templateResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      409  {object}  map[string]string
-// @Failure      422  {object}  map[string]string
-// @Router       /templates [post]
 func (h *TemplateHandler) create(c fiber.Ctx) error {
 	req := middleware.GetBody[createTemplateRequest](c)
 	t, err := h.svc.Create(c.RequestCtx(), req.toInput())
@@ -119,19 +87,6 @@ func (h *TemplateHandler) create(c fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(toResponse(t))
 }
 
-// update godoc
-// @Summary      Partially update a project template (admin only)
-// @Tags         templates
-// @Security     BearerAuth
-// @Accept       json
-// @Produce      json
-// @Param        id    path  string                true  "Template UUID"
-// @Param        body  body  updateTemplateRequest true  "Fields to update (only sent fields are changed)"
-// @Success      200  {object}  templateResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
-// @Failure      422  {object}  map[string]string
-// @Router       /templates/{id} [patch]
 func (h *TemplateHandler) update(c fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -149,15 +104,6 @@ func (h *TemplateHandler) update(c fiber.Ctx) error {
 	return c.JSON(toResponse(t))
 }
 
-// deactivate godoc
-// @Summary      Deactivate a project template (admin only)
-// @Tags         templates
-// @Security     BearerAuth
-// @Param        id   path  string  true  "Template UUID"
-// @Success      204  "No Content"
-// @Failure      400  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
-// @Router       /templates/{id} [delete]
 func (h *TemplateHandler) deactivate(c fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

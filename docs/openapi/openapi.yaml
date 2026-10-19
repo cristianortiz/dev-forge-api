@@ -1,0 +1,413 @@
+openapi: 3.2.0
+info:
+  title: Dev Forge API
+  description: HTTP API for authentication and project template management.
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: Version 1 API
+tags:
+  - name: auth
+    description: Authenticated user operations.
+  - name: templates
+    description: Project template catalog.
+  - name: health
+    description: Public liveness and readiness probes.
+security:
+  - BearerAuth: []
+paths:
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the authenticated user's profile
+      description: Returns the profile associated with the valid Zitadel token.
+      responses:
+        "200":
+          description: Authenticated user profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [templates]
+      summary: List project templates
+      description: Returns the templates visible to the authenticated user.
+      parameters:
+        - name: language
+          in: query
+          required: false
+          description: Filter by programming language.
+          schema:
+            type: string
+        - name: framework
+          in: query
+          required: false
+          description: Filter by framework.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching project templates.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TemplateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    post:
+      operationId: createTemplate
+      tags: [templates]
+      summary: Create a project template
+      description: Requires an authenticated user with the admin role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateRequest"
+            examples:
+              goFiberTemplate:
+                summary: Example Go and Fiber project template
+                value:
+                  name: Go Fiber API
+                  slug: go-fiber-api-example
+                  description: A minimal Go API template.
+                  language: go
+                  framework: fiber
+                  dockerfile_template: |
+                    FROM golang:1.26-alpine
+                    WORKDIR /app
+                    COPY . .
+                    RUN go build -o server .
+                    CMD ["./server"]
+                  default_params:
+                    PORT: "8080"
+                  default_scope_config:
+                    replicas: 1
+                  repo_template_url: https://github.com/example/go-fiber-api-template
+      responses:
+        "201":
+          description: Template created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Template UUID.
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getTemplate
+      tags: [templates]
+      summary: Get a project template
+      description: Returns one template by UUID.
+      responses:
+        "200":
+          description: Project template.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    patch:
+      operationId: updateTemplate
+      tags: [templates]
+      summary: Partially update a project template
+      description: Requires an authenticated user with the admin role. Only supplied fields are changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTemplateRequest"
+            examples:
+              updateDescription:
+                summary: Change a template description
+                value:
+                  description: Updated example description.
+      responses:
+        "200":
+          description: Updated project template.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+    delete:
+      operationId: deactivateTemplate
+      tags: [templates]
+      summary: Deactivate a project template
+      description: Requires an authenticated user with the admin role. This is a soft delete.
+      responses:
+        "204":
+          description: Template deactivated.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /health:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Check whether the API process is alive
+      servers:
+        - url: /
+      security: []
+      responses:
+        "200":
+          description: The API process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      tags: [health]
+      summary: Check whether the API is ready
+      servers:
+        - url: /
+      security: []
+      responses:
+        "200":
+          description: The API is ready to receive requests.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Zitadel access token or personal access token. Do not use the server API key file.
+  responses:
+    BadRequest:
+      description: The request body is malformed or a path parameter is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: A valid Zitadel token is required.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: The authenticated user does not have the admin role required for this operation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: The requested template does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: A template with the same slug already exists.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnprocessableEntity:
+      description: The request body is valid JSON but fails field validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalServerError:
+      description: An unexpected server-side error occurred.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    UserResponse:
+      type: object
+      required: [id, email, name, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, developer, viewer]
+    CreateTemplateRequest:
+      type: object
+      required: [name, slug, language, dockerfile_template]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        slug:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        language:
+          type: string
+          minLength: 1
+        framework:
+          type: string
+        dockerfile_template:
+          type: string
+          minLength: 1
+        default_params:
+          $ref: "#/components/schemas/JSONValue"
+          description: Optional JSON configuration; defaults to an empty object.
+        default_scope_config:
+          $ref: "#/components/schemas/JSONValue"
+          description: Optional JSON scope configuration; defaults to an empty object.
+        repo_template_url:
+          type: string
+          description: Optional URL; when non-empty it must be valid.
+    UpdateTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        language:
+          type: string
+        framework:
+          type: string
+        dockerfile_template:
+          type: string
+        default_params:
+          $ref: "#/components/schemas/JSONValue"
+          description: Optional JSON configuration.
+        default_scope_config:
+          $ref: "#/components/schemas/JSONValue"
+          description: Optional JSON scope configuration.
+        repo_template_url:
+          type: string
+          description: Optional URL; when non-empty it must be valid.
+        is_active:
+          type: boolean
+    TemplateResponse:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - description
+        - language
+        - framework
+        - dockerfile_template
+        - default_params
+        - default_scope_config
+        - repo_template_url
+        - is_active
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        language:
+          type: string
+        framework:
+          type: string
+        dockerfile_template:
+          type: string
+        default_params:
+          $ref: "#/components/schemas/JSONValue"
+        default_scope_config:
+          $ref: "#/components/schemas/JSONValue"
+        repo_template_url:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    ErrorResponse:
+      type: object
+      required: [error, request_id]
+      properties:
+        error:
+          type: string
+        request_id:
+          type: string
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+    ReadinessResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ready
+    JSONValue:
+      description: Any valid JSON value. These fields are typically JSON objects.
+      type: [object, array, string, number, boolean, "null"]
