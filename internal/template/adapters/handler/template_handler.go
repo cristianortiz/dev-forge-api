@@ -28,7 +28,7 @@ func New(svc ports.TemplateService, logger *zap.Logger) *TemplateHandler {
 //	GET    /templates        — list (all authenticated roles)
 //	GET    /templates/:id    — get by ID (all authenticated roles)
 //	POST   /templates        — create (admin only)
-//	PUT    /templates/:id    — update (admin only)
+//	PATCH  /templates/:id    — change catalog visibility (admin only)
 //	DELETE /templates/:id    — deactivate (admin only)
 func (h *TemplateHandler) RegisterRoutes(router fiber.Router, authMW, adminMW fiber.Handler) {
 	g := router.Group("/templates")
@@ -78,8 +78,11 @@ func (h *TemplateHandler) create(c fiber.Ctx) error {
 	req := middleware.GetBody[createTemplateRequest](c)
 	t, err := h.svc.Create(c.RequestCtx(), req.toInput())
 	if err != nil {
-		if errors.Is(err, domain.ErrSlugAlreadyExists) {
-			return fiber.NewError(fiber.StatusConflict, "slug already exists")
+		if errors.Is(err, domain.ErrTemplateVersionExists) {
+			return fiber.NewError(fiber.StatusConflict, "template version already exists")
+		}
+		if errors.Is(err, domain.ErrInvalidTemplate) {
+			return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
 		}
 		h.logger.Error("create template", zap.Error(err))
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create template")
@@ -97,6 +100,9 @@ func (h *TemplateHandler) update(c fiber.Ctx) error {
 	if err != nil {
 		if errors.Is(err, domain.ErrTemplateNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, "template not found")
+		}
+		if errors.Is(err, domain.ErrInvalidTemplate) {
+			return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
 		}
 		h.logger.Error("update template", zap.String("id", c.Params("id")), zap.Error(err))
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update template")

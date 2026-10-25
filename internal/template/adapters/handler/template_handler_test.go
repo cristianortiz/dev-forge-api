@@ -68,17 +68,32 @@ func newTestApp(svc ports.TemplateService) *fiber.App {
 func sampleTemplate() *domain.ProjectTemplate {
 	return &domain.ProjectTemplate{
 		ID:                 uuid.New(),
-		Name:               "Go REST API",
-		Slug:               "go-rest-api",
-		Description:        "A Go REST API scaffold",
+		Name:               "Go Modular Monolith",
+		Slug:               "go-modular-monolith",
+		Version:            "v1.0.0",
+		Description:        "A Go API scaffold",
 		Language:           "go",
 		Framework:          "fiber",
-		DockerfileTemplate: "FROM golang:1.26-alpine",
+		SourceRepository:   "https://github.com/example/go-modular-monolith-v1",
+		SourceCommit:       "0123456789abcdef0123456789abcdef01234567",
 		DefaultParams:      []byte(`{"PORT":"8080"}`),
 		DefaultScopeConfig: []byte(`{"replicas":1}`),
-		RepoTemplateURL:    "",
 		IsActive:           true,
 		CreatedAt:          time.Date(2026, 5, 23, 12, 0, 0, 0, time.UTC),
+	}
+}
+
+func validCreatePayload() map[string]any {
+	return map[string]any{
+		"name":                 "Go Modular Monolith",
+		"slug":                 "go-modular-monolith",
+		"version":              "v1.0.0",
+		"language":             "go",
+		"framework":            "fiber",
+		"source_repository":    "https://github.com/example/go-modular-monolith-v1",
+		"source_commit":        "0123456789abcdef0123456789abcdef01234567",
+		"default_params":       map[string]string{"PORT": "8080"},
+		"default_scope_config": map[string]int{"replicas": 1},
 	}
 }
 
@@ -268,15 +283,10 @@ func TestCreate_InvalidJSON_Returns400(t *testing.T) {
 func TestCreate_SlugConflict_Returns409(t *testing.T) {
 	app := newTestApp(&mockTemplateService{
 		createFn: func(_ context.Context, _ ports.CreateTemplateInput) (*domain.ProjectTemplate, error) {
-			return nil, domain.ErrSlugAlreadyExists
+			return nil, domain.ErrTemplateVersionExists
 		},
 	})
-	body := jsonBody(t, map[string]any{
-		"name":                "Go REST API",
-		"slug":                "go-rest-api",
-		"language":            "go",
-		"dockerfile_template": "FROM golang:1.26-alpine",
-	})
+	body := jsonBody(t, validCreatePayload())
 	req := httptest.NewRequest("POST", "/templates", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
@@ -293,12 +303,7 @@ func TestCreate_Success_Returns201(t *testing.T) {
 			return tmpl, nil
 		},
 	})
-	body := jsonBody(t, map[string]any{
-		"name":                "Go REST API",
-		"slug":                "go-rest-api",
-		"language":            "go",
-		"dockerfile_template": "FROM golang:1.26-alpine",
-	})
+	body := jsonBody(t, validCreatePayload())
 	req := httptest.NewRequest("POST", "/templates", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
@@ -321,12 +326,7 @@ func TestCreate_ServiceError_Returns500(t *testing.T) {
 			return nil, errors.New("db error")
 		},
 	})
-	body := jsonBody(t, map[string]any{
-		"name":                "Go REST API",
-		"slug":                "go-rest-api",
-		"language":            "go",
-		"dockerfile_template": "FROM golang:1.26-alpine",
-	})
+	body := jsonBody(t, validCreatePayload())
 	req := httptest.NewRequest("POST", "/templates", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
@@ -340,7 +340,7 @@ func TestCreate_ServiceError_Returns500(t *testing.T) {
 
 func TestUpdate_InvalidUUID_Returns400(t *testing.T) {
 	app := newTestApp(&mockTemplateService{})
-	req := httptest.NewRequest("PATCH", "/templates/not-a-uuid", bytes.NewBufferString("{}"))
+	req := httptest.NewRequest("PATCH", "/templates/not-a-uuid", bytes.NewBufferString(`{"is_active":false}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
 
@@ -355,7 +355,7 @@ func TestUpdate_NotFound_Returns404(t *testing.T) {
 			return nil, domain.ErrTemplateNotFound
 		},
 	})
-	req := httptest.NewRequest("PATCH", "/templates/"+uuid.New().String(), bytes.NewBufferString("{}"))
+	req := httptest.NewRequest("PATCH", "/templates/"+uuid.New().String(), bytes.NewBufferString(`{"is_active":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
 
@@ -364,9 +364,9 @@ func TestUpdate_NotFound_Returns404(t *testing.T) {
 	}
 }
 
-func TestUpdate_InvalidURL_Returns422(t *testing.T) {
+func TestUpdate_MissingVisibility_Returns422(t *testing.T) {
 	app := newTestApp(&mockTemplateService{})
-	body := jsonBody(t, map[string]any{"repo_template_url": "not-a-url"})
+	body := jsonBody(t, map[string]any{})
 	req := httptest.NewRequest("PATCH", "/templates/"+uuid.New().String(), body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
@@ -383,7 +383,7 @@ func TestUpdate_Success_Returns200(t *testing.T) {
 			return tmpl, nil
 		},
 	})
-	req := httptest.NewRequest("PATCH", "/templates/"+tmpl.ID.String(), bytes.NewBufferString("{}"))
+	req := httptest.NewRequest("PATCH", "/templates/"+tmpl.ID.String(), bytes.NewBufferString(`{"is_active":false}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
 
@@ -398,7 +398,7 @@ func TestUpdate_ServiceError_Returns500(t *testing.T) {
 			return nil, errors.New("db error")
 		},
 	})
-	req := httptest.NewRequest("PATCH", "/templates/"+uuid.New().String(), bytes.NewBufferString("{}"))
+	req := httptest.NewRequest("PATCH", "/templates/"+uuid.New().String(), bytes.NewBufferString(`{"is_active":false}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, _ := app.Test(req)
 

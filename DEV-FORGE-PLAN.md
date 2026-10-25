@@ -6,8 +6,8 @@
 > **Diseño y arquitectura:** [docs/DESIGN.md](docs/DESIGN.md)
 > **Schema de base de datos:** [docs/db-schema.md](docs/db-schema.md)
 
-**Última actualización:** 2026-10-09
-**Estado global:** 🔵 En progreso — Fase 1: auth ✅ + Swagger ✅; catálogo de blueprints y creación de aplicaciones en actualización (1.4–1.10)
+**Última actualización:** 2026-10-25
+**Estado global:** 🔵 En progreso — Fase 1: auth ✅ + Fiber v3 ✅ + OpenAPI 3.2/Scalar ✅; modelo y API del catálogo versionado implementados; falta publicar un snapshot real y completar la creación de apps (1.6–1.10)
 
 ---
 
@@ -28,7 +28,7 @@
 | Fase | Nombre | Estado | Progreso |
 |---|---|---|---|
 | 0 | Setup del Proyecto | ✅ | 9/10 activas (1 skipped) |
-| 1 | Auth (Zitadel) + Applications + Blueprints + Git | 🔵 | 4/13 ✅ + 1.4–1.7, 1.10 🔵 |
+| 1 | Auth (Zitadel) + Applications + Blueprints + Git | 🔵 | 5/13 ✅ + 1.5, 1.7, 1.10 🔵; 1.6 ⏸️ |
 | 2 | Build → Release → Deploy Pipeline | ⬜ | 0/11 |
 | 3 | Configuration + Services | ⬜ | 0/6 |
 | 4 | Observabilidad (OTEL + Grafana Stack) | ⬜ | 0/9 |
@@ -50,13 +50,13 @@
 | 0.5 | Package `shared/config` | ✅ | 2026-04-28 | 2026-04-28 | Struct tipada, helpers `getEnv*`, `Load()`, `LogLevel()` |
 | 0.6 | Package `shared/database` | ✅ | 2026-04-28 | 2026-04-28 | pgxpool + otelpgx opcional |
 | 0.7 | Package `shared/logger` | ✅ | 2026-04-28 | 2026-04-28 | Zap, JSON en prod / console en dev |
-| 0.8 | Package `shared/server` | ✅ | 2026-04-28 | 2026-04-28 | Fiber v2, CORS, recovery, zapLogger, `/health`, `/ready` |
+| 0.8 | Package `shared/server` | ✅ | 2026-04-28 | 2026-04-28 | Fiber v3, CORS, recovery, zapLogger, `/health`, `/ready` |
 | 0.9 | Makefile | ✅ | 2026-04-28 | 2026-04-28 | Targets: build, test, lint, migrate-*, dev, docker-* |
 | 0.10 | Verificar conectividad homelab K8s (kubeconfig, client-go ping) | ⬜ | — | — | Requiere kubeconfig local configurado |
 | 0.11 | Configurar Zitadel: proyecto `dev-forge`, roles, app OIDC | ✅ | 2026-05-11 | 2026-05-21 | Zitadel Cloud; app JWT Profile; service user dev-forge-test con PAT |
 
 **Notas de implementación verificadas:**
-- `go.mod`: Go 1.26, Fiber v2, pgx v5, Zap, OTEL, otelpgx ✅
+- `go.mod`: Go 1.26, Fiber v3, pgx v5, Zap, OTEL, otelpgx ✅
 - `.env.example`: variables App, DB, Zitadel, OTEL documentadas ✅
 - Zitadel Cloud configurado: proyecto `dev-forge`, roles admin/developer/viewer, app JWT Profile ✅
 - `secrets/zitadel-api-key.json`: key RSA de la API app (gitignored) ✅
@@ -191,9 +191,9 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
 - **Sin builds dentro del proceso API**: el API solo orquesta al runner.
 - **Sin provisioning genérico de bases de datos**. Si la app necesita PostgreSQL/secretos en el primer deploy, depende de la decisión registrada en `docs/DESIGN.md` §12.
 - **Sin approvals, audit ni notificaciones** (Fase 5) ni parámetros/servicios (Fase 3) en el camino crítico.
-- **Sin frontend**: todo se recorre por la API (Swagger UI en `/api/v1/docs`).
+- **Sin frontend**: todo se recorre por la API (Scalar API Reference en `/api/v1/docs`).
 
-## Fase 1: Auth (Zitadel) + Applications + Blueprints + Git ⬜
+## Fase 1: Auth (Zitadel) + Applications + Blueprints + Git 🔵
 
 > Primer corte vertical: autenticación, CRUD de apps desde plantilla, integración GitHub.
 
@@ -202,16 +202,16 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
 | 1.1 | Módulo `auth`: domain (User entity, zitadel_id) | ✅ | 2026-05-02 | 2026-05-02 | `internal/auth/domain/user.go` |
 | 1.2 | Módulo `auth`: ports + service (validar token, sync user, get me) | ✅ | 2026-05-02 | 2026-05-21 | zitadel/oidc/v3 introspection; JWT Profile con key RSA |
 | 1.3 | Módulo `auth`: middleware Zitadel + `RequireRole` | ✅ | 2026-05-02 | 2026-05-02 | `internal/shared/middleware/auth.go`; claim `urn:zitadel:iam:org:project:roles` |
-| 1.4 | Módulo `template`: domain + ports + usecase para catálogo de versiones inmutables | 🔵 | 2026-10-09 | — | CRUD base existe; adaptar `ProjectTemplate` a blueprint versionado, con repo/commit de procedencia y sin Dockerfile ejecutable en DB |
-| 1.5 | Módulo `template`: adapters para listar/publicar/desactivar versiones validadas | 🔵 | 2026-10-09 | — | Handlers/repo base existen; un release no se edita in-place. Publicación solo tras gates del repo fuente |
-| 1.6 | Seed del blueprint inicial Go API — monolito modular | 🔵 | 2026-10-09 | — | El seed actual inserta cinco metadata records con `repo_template_url` vacío; retirar prototipos del catálogo activo y publicar solo una fuente versionada y validada |
+| 1.4 | Módulo `template`: domain + ports + usecase para catálogo de versiones inmutables | ✅ | 2026-10-09 | 2026-10-25 | `ProjectTemplate` ahora identifica `slug + version`, exige URL GitHub y SHA completos, valida defaults sin claves sensibles y solo permite cambiar visibilidad después de publicar |
+| 1.5 | Módulo `template`: adapters para listar/publicar/desactivar versiones validadas | 🔵 | 2026-10-25 | — | API y PostgreSQL persisten versiones inmutables; se probó listar, obtener por ID, desactivar/reactivar y filtrar inactivos. PATCH acepta solo `is_active`. Falta enlazar la publicación a evidencia automatizada de los gates del repo fuente |
+| 1.6 | Seed del blueprint inicial Go API — monolito modular | ⏸️ | — | — | Seed ejecutado para `go-modular-monolith@v1.0.0`; el snapshot apunta provisionalmente a `dev-forge-api` en `47b6e5cb548d65a3494ea537c34f068202e4c6d9`. Falta el repositorio curado del blueprint y evidencia de que pasó los gates |
 | 1.7 | Módulo `app`: domain + ports + usecase (CRUD y creación desde blueprint) | 🔵 | 2026-06-07 | — | Domain/ports/usecase base existen; conservar referencia a la versión exacta elegida y coordinar el estado de generación del repo |
 | 1.8 | Módulo `app`: adapters HTTP/PostgreSQL y provisioning idempotente | ⬜ | — | — | Reservar app, generar repo en GitHub, guardar URL; reintentos/reconciliación para fallos entre DB y GitHub |
 | 1.9 | Módulo `git`: GitHub API (repos, branches y generación desde blueprint) | ⬜ | — | — | Token de servicio con permisos mínimos; sustituir tokens explícitos sin secretos y generar desde snapshot de versión |
-| 1.10 | Migraciones SQL: evolución de project_templates + applications | 🔵 | 2026-05-02 | — | `000001` y `000002` existen; versionar el catálogo, retirar `dockerfile_template`, inactivar filas sin fuente y añadir `template_id` obligatorio, provisioning e idempotencia. Migrar clusters con scopes en Fase 2. |
+| 1.10 | Migraciones SQL: evolución de project_templates + applications | 🔵 | 2026-05-02 | — | `000003_version_project_templates` ya fue aplicada y validada en PostgreSQL; reemplaza `project_templates` desde cero y descarta sus filas/campos prototipo. Falta crear `applications` con `template_id` obligatorio, provisioning e idempotencia. Migrar clusters con scopes en Fase 2. |
 | 1.11 | Módulo `cluster`: domain + ports + service (CRUD, token encriptado) | ⬜ | — | — | Admin-only; usado por `deploy` para construir client-go config |
 | 1.12 | Módulo `cluster`: adapters (HTTP handlers admin + PostgreSQL repo) | ⬜ | — | — | Encripta token con `shared/crypto` |
-| 1.13 | OpenAPI spec + Swagger UI en `/api/v1/docs` | ✅ | 2026-05-23 | 2026-05-23 | `swaggo/swag` + `swaggo/fiber-swagger`; `docs/swagger/`; `make swagger` |
+| 1.13 | Contrato OpenAPI 3.2 + Scalar en `/api/v1/docs` | ✅ | 2026-10-18 | 2026-10-18 | Contrato canónico `docs/openapi/openapi.yaml`; servido en `/api/v1/openapi.yaml`; UI Scalar local/offline en `/api/v1/docs`; validar con `make openapi-check` |
 
 **Notas de implementación verificadas:**
 - `go build ./...` limpio ✅ (código actual; no prueba el nuevo contrato de blueprint)
@@ -237,9 +237,9 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
   - `template/adapters/handler/template_dto.go`: request/response structs con `json.RawMessage` para JSONB, `toInput()`, `toResponse()`
   - `template/adapters/handler/template_dto_test.go`: 10 tests — mappings, conversión RawMessage↔[]byte, RFC3339, serialización JSONB como objeto
   - `template/adapters/handler/template_handler_test.go`: 23 tests — todos los handlers con mock service, Fiber httptest
-  - `migrations/000002_create_project_templates.up/down.sql`: tabla inicial; requiere migración de evolución para catálogo versionado
+  - `migrations/000002_create_project_templates.up/down.sql`: tabla legacy inicial; `000003_version_project_templates` define la evolución al catálogo versionado
   - Template module wired en `cmd/server/routes.go`
-  - **Implementaciones adicionales (2026-05-23 — seed + Swagger):**
+  - **Implementaciones históricas (2026-05-23 — seed + Swagger):**
   - `cmd/seed/main.go`: seed inicial de cinco metadata records sin repos fuente; no cumple todavía el nuevo contrato versionado. `make seed` debe publicar solo el blueprint validado del MVP.
   - `template/adapters/handler/template_handler.go`: 5 endpoints — PATCH en vez de PUT para update (partial update semántics)
   - Capa `service/` renombrada a `usecase/` en todos los módulos (`auth`, `template`, `app`) — convención Clean Architecture; `*_service.go` → `*_usecase.go`
@@ -248,16 +248,25 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
   - Swagger UI montado en `GET /api/v1/docs/*` via `swaggo/fiber-swagger`; sin auth requerida
   - `swaggertype:"object"` añadido a campos `json.RawMessage` en `template_dto.go` para correcta generación de spec
   - **Cobertura total: 85.7%** (CI gate: 70%)
+  - **Implementación del catálogo versionado (2026-10-25):**
+    - `template/domain`: identidad `slug + version`, fuente GitHub + SHA completos, defaults JSON objeto sin claves sensibles; la metadata publicada no tiene operación de actualización
+    - `template/usecase` y ports: publicación validada estructuralmente; reactivación/desactivación cambia solo `is_active`
+    - `template/adapters`: listados solo activos, persistencia por versión y PATCH estricto solo para `is_active`
+    - `migrations/000003_version_project_templates`: reconstruye `project_templates` sin conservar filas, exige versión/fuente/SHA y establece unicidad `(slug, version)`; aplicada y validada por el usuario en PostgreSQL (2026-10-25)
+    - `cmd/seed`: único blueprint Go inicial, requiere explícitamente URL de snapshot y SHA; se ejecutó apuntando provisionalmente al repositorio `dev-forge-api`
+    - `docs/openapi/openapi.yaml`: contrato actualizado; `dockerfile_template` ya no forma parte de requests/responses
 
 **Criterios de verificación:**
 - [x] GET `/api/v1/auth/me` → perfil + user sincronizado en DB ✅
 - [x] `go build ./...` limpio con template module wired ✅
-- [x] 33 tests handler+dto pasan — `template/adapters/handler` ✅
-- [ ] Migración evoluciona el catálogo y conserva filas históricas como inactivas cuando no tengan repo/commit fuente
-- [ ] GET `/api/v1/templates` devuelve solo versiones publicadas y activas; un registro activo tiene repo snapshot y commit verificables
+- [x] `go test ./...` pasa tras el cambio de catálogo versionado ✅
+- [x] Domain valida slug, semver, repositorio GitHub, SHA y defaults; tests cubren también activación y metadata inmutable ✅
+- [x] PATCH de template permite cambiar únicamente `is_active`; la metadata publicada no tiene operación de actualización ✅
+- [x] Aplicar y verificar la migración `000003` en PostgreSQL; reemplaza la tabla de prototipos por el esquema versionado ✅
+- [x] GET `/api/v1/templates` devuelve solo versiones activas; se verificó listar, desactivar/reactivar y obtener por ID con un registro versionado ✅
 - [ ] Solo la publicación validada puede crear una versión; PATCH/DELETE no modifican versiones referenciadas ni su fuente
-- [ ] Seed idempotente deja disponible solo `go-modular-monolith` en su versión inicial; prototipos sin repo quedan inactivos
-- [x] Swagger UI accesible en `/api/v1/docs/index.html` ✅
+- [ ] Seed idempotente deja disponible solo `go-modular-monolith` en su versión inicial, con snapshot GitHub real
+- [x] Scalar API Reference accesible en `/api/v1/docs`; contrato OpenAPI 3.2 en `/api/v1/openapi.yaml` ✅
 - [ ] POST `/api/v1/apps` con `template_id` → repo GitHub desde la versión exacta, tokens sustituidos, defaults seguros y referencia de versión persistida
 - [ ] POST `/api/v1/apps` sin `template_id` → `400 Bad Request`; el MVP no permite apps sin blueprint
 - [ ] Fallo/reintento entre PostgreSQL y GitHub no duplica repos ni deja apps permanentemente en `provisioning`
@@ -404,7 +413,7 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
 | # | Tarea | Estado | Fecha inicio | Fecha fin | Notas |
 |---|---|---|---|---|---|
 | 6.1 | Helm chart de dev-forge: deployment, service y configuración externa | ⬜ | — | — | Definir DB externa o subchart opcional para homelab; no incluir Redis sin caso de uso. La PostgreSQL de apps es independiente de la DB del control plane. |
-| 6.2 | OpenAPI spec auto-generada + Swagger UI en `/api/v1/docs` | ⏭️ | — | — | Adelantado a Fase 1 como tarea 1.13 |
+| 6.2 | Contrato OpenAPI 3.2 + Scalar API Reference en `/api/v1/docs` | ⏭️ | — | — | Adelantado a Fase 1 como tarea 1.13; la spec canónica está en `docs/openapi/openapi.yaml` |
 | 6.3 | Deploy dev-forge en homelab via Helm | ⬜ | — | — | Dogfooding |
 | 6.4 | Seed data script: datos de demo realistas | ⬜ | — | — | |
 | 6.5 | Docker Compose local: API + PostgreSQL + dependencias necesarias | ⬜ | — | — | Mantener el stack mínimo; Zitadel Cloud puede seguir siendo externo. Añadir servicios solo si el recorrido MVP los requiere. |
@@ -415,7 +424,7 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
 
 **Criterios de verificación:**
 - [ ] `helm install dev-forge ./deployments/helm/dev-forge` despliega en homelab
-- [ ] Swagger UI funciona en `/api/v1/docs`
+- [ ] Scalar API Reference funciona en `/api/v1/docs` y sirve el contrato OpenAPI 3.2
 - [ ] Docker Compose local levanta todo
 - [ ] Demo script ejecutable de principio a fin
 - [ ] CI pipeline pasa en GitHub Actions
@@ -485,7 +494,11 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
 | 2026-10-09 | Replanteada la estrategia de templates: un blueprint Go API monolito modular, versionado e inmutable; repos fuente como artefacto completo; sin configurador combinatorio ni workflows de CD duplicados |
 | 2026-10-09 | Acotado el MVP a un recorrido vertical; build runner aislado; servicios externos; estado actual separado del objetivo y decisiones pendientes centralizadas en DESIGN §12 |
 | 2026-10-10 | Documentado el build runner (Job efímero de K8s, ciclo de vida, aislamiento, contrato con el API) en DESIGN §4; desglosada la tarea 2.2 en spike + 2.2a–2.2e con pruebas adversas; añadidas decisiones §12 #9 (registry) y #10 (viabilidad de BuildKit rootless) |
+| 2026-10-18 | Fase 1: migración de Fiber v2 a Fiber v3 integrada en `main` |
+| 2026-10-18 | Tarea 1.13 actualizada: contrato OpenAPI 3.2 canónico en `docs/openapi/openapi.yaml`, servido junto con Scalar offline; `make openapi-check` valida lint y representación servida |
+| 2026-10-25 | Tarea 1.4 implementada: dominio, ports y usecase para blueprint `slug + version`, fuente/commit obligatorios, defaults seguros y metadata inmutable |
+| 2026-10-25 | Catálogo adaptado: migración 000003, repositorio/API/OpenAPI versionados y seed de un solo blueprint condicionado a una fuente GitHub real; `go test ./...` pasa |
 
 ---
 
-> **Próximo paso:** actualizar schema y modelo de catálogo para versiones inmutables (1.4, 1.5, 1.10), luego publicar y probar el blueprint Go modular monolith antes de completar la generación de apps (1.6–1.9).
+> **Próximo paso:** revisar/aplicar `000003_version_project_templates` en la DB de desarrollo y validar la migración; después crear/configurar el snapshot GitHub real de `go-modular-monolith`, ejecutar los gates y `make seed` con URL + SHA. No se publica un placeholder. Con un catálogo activo verificado, continuar con `template_id` obligatorio y provisioning idempotente de apps (1.7–1.9).

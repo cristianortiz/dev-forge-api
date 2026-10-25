@@ -2,11 +2,11 @@
 
 > Referencia del schema PostgreSQL. La fuente de verdad real son los archivos en `migrations/`. Este documento sirve para consulta rápida sin ejecutar queries.
 
-**Última revisión:** 2026-10-09
+**Última revisión:** 2026-10-25
 **Base de datos:** `dev_forge` (PostgreSQL 16)  
 **Nota:** Zitadel usa su propia DB `zitadel` en el mismo PostgreSQL — esas tablas son gestionadas automáticamente por Zitadel y no se tocan desde dev-forge.
 
-> **Estado del diseño de blueprints:** `project_templates` y `applications` describen aquí el schema objetivo del MVP versionado. Las migraciones actuales todavía reflejan el modelo anterior (Dockerfile en DB y sin provisioning de repo); actualizarlo es tarea 1.10 de `DEV-FORGE-PLAN.md`. No asumir que esta definición ya está aplicada.
+> **Estado del diseño de blueprints:** la migración `000003_version_project_templates` reemplaza la tabla prototipo y elimina sus filas para crear el modelo versionado. La migración está definida en el repo; comprobar la versión de la base antes de asumir que ya se aplicó. La tabla `applications` y su provisioning/idempotencia siguen pendientes de la tarea 1.10; este documento continúa siendo el schema objetivo para esa parte.
 
 ---
 
@@ -69,18 +69,21 @@ CREATE TABLE project_templates (
     description          TEXT NOT NULL DEFAULT '',
     language             VARCHAR(50) NOT NULL,          -- "go"
     framework            VARCHAR(100) NOT NULL,         -- "fiber"
-    source_repository    VARCHAR(500),                  -- snapshot GitHub Template Repository de esta versión
-    source_commit        CHAR(40),                      -- SHA del contenido publicado
+    source_repository    VARCHAR(500) NOT NULL,         -- snapshot GitHub Template Repository de esta versión
+    source_commit        VARCHAR(40) NOT NULL,          -- SHA completo del contenido publicado
     default_params       JSONB NOT NULL DEFAULT '{}',   -- solo configuración no sensible
     default_scope_config JSONB NOT NULL DEFAULT '{}',   -- recursos/probes sugeridos; ajustables por scope
     is_active            BOOLEAN NOT NULL DEFAULT TRUE,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (slug, version),
-    CHECK (NOT is_active OR (source_repository IS NOT NULL AND source_commit IS NOT NULL))
+    CHECK (source_repository ~* '^https://github[.]com/[A-Za-z0-9]([A-Za-z0-9_.-]*[A-Za-z0-9])?/[A-Za-z0-9]([A-Za-z0-9_.-]*[A-Za-z0-9])?$'),
+    CHECK (source_commit ~ '^[0-9a-fA-F]{40}$'),
+    CHECK (jsonb_typeof(default_params) = 'object'),
+    CHECK (jsonb_typeof(default_scope_config) = 'object')
 );
 ```
 
-Cada versión publicable es inmutable. `is_active = FALSE` la oculta para nuevas apps, pero no debe borrarse ni cambiar su repo/commit si alguna `application` la referencia. Las columnas de fuente solo pueden ser nulas en filas históricas inactivas; el endpoint de catálogo nunca devuelve una versión sin fuente verificable. `default_params` no admite secretos ni credenciales.
+Cada versión publicable es inmutable. `is_active = FALSE` la oculta para nuevas apps, pero no debe borrarse ni cambiar su repo/commit si alguna `application` la referencia. Toda fila debe tener una fuente y un SHA completos; el endpoint de catálogo solo devuelve versiones activas. `default_params` no admite secretos ni credenciales.
 
 ### `clusters`
 ```sql
@@ -116,7 +119,7 @@ Para crear desde blueprint, reservar la app con estado `provisioning` y una clav
 
 ### Evolución desde la migración actual
 
-La migración de `project_templates` debe agregar `version`, `source_repository` y `source_commit`, reemplazar la unicidad global de `slug` por `(slug, version)` y eliminar `dockerfile_template` cuando ningún build lo consuma. Las filas históricas del seed que no tengan repo/commit real reciben una versión legacy y se conservan inactivas, nunca seleccionables. El nuevo seed publica una sola versión validada del blueprint Go monolito modular. Añadir `provisioning_status` e `idempotency_key` antes de cablear la generación de repos en `POST /apps`.
+La migración `000003_version_project_templates` elimina y recrea la tabla `project_templates`, reemplaza la unicidad global de `slug` por `(slug, version)` y elimina `dockerfile_template` y `repo_template_url`. Como el entorno sigue en prototipado, las filas existentes no se conservan. El seed publica solo `go-modular-monolith@v1.0.0` cuando se proporcionan `BLUEPRINT_SOURCE_REPOSITORY` y `BLUEPRINT_SOURCE_COMMIT` de un snapshot real que ya pasó los gates; no inventa una fuente por defecto. Sigue pendiente agregar `provisioning_status` e `idempotency_key` antes de cablear la generación de repos en `POST /apps`.
 
 ### `builds`
 ```sql
@@ -307,7 +310,8 @@ Los archivos existentes en `migrations/` usan el formato de golang-migrate:
 migrations/
 ├── 000001_create_users.up.sql
 ├── 000001_create_users.down.sql
-├── 000002_create_project_templates.up.sql       ← modelo legacy
+├── 000002_create_project_templates.up.sql       ← esquema prototipo inicial
+├── 000003_version_project_templates.up.sql      ← reconstruye el catálogo versionado
 └── 000002_create_project_templates.down.sql
 ```
 

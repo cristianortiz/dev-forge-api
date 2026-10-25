@@ -22,7 +22,7 @@ const bodyKey bodyContextKey = "validated_body"
 // Usage in router:
 //
 //	templates.Post("/", middleware.ValidateBody[ports.CreateTemplateInput](), h.Create)
-//	templates.Put("/:id", middleware.ValidateBody[ports.UpdateTemplateInput](), h.Update)
+//	templates.Patch("/:id", middleware.ValidateBody[ports.UpdateTemplateInput](), h.Update)
 func ValidateBody[T any]() fiber.Handler {
 	return func(c fiber.Ctx) error {
 		var input T

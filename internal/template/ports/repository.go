@@ -20,12 +20,8 @@ type TemplateRepository interface {
 	List(ctx context.Context, filter ListTemplatesFilter) ([]*domain.ProjectTemplate, error)
 	// GetByID returns a template by UUID; returns ErrTemplateNotFound if absent.
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.ProjectTemplate, error)
-	// GetBySlug returns a template by its unique slug; returns ErrTemplateNotFound if absent.
-	GetBySlug(ctx context.Context, slug string) (*domain.ProjectTemplate, error)
 	// Create persists a new template.
 	Create(ctx context.Context, t *domain.ProjectTemplate) error
-	// Update persists changes to an existing template.
-	Update(ctx context.Context, t *domain.ProjectTemplate) error
-	// Deactivate sets is_active = false for the given template.
-	Deactivate(ctx context.Context, id uuid.UUID) error
+	// SetActive changes only catalog visibility.
+	SetActive(ctx context.Context, id uuid.UUID, active bool) error
 }

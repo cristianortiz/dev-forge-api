@@ -14,15 +14,11 @@ import (
 
 // -- mock repo ---------------------------------------------------------------
 
-func strPtr(s string) *string { return &s }
-
 type mockTemplateRepo struct {
-	list       func(ctx context.Context, filter ports.ListTemplatesFilter) ([]*domain.ProjectTemplate, error)
-	getByID    func(ctx context.Context, id uuid.UUID) (*domain.ProjectTemplate, error)
-	getBySlug  func(ctx context.Context, slug string) (*domain.ProjectTemplate, error)
-	create     func(ctx context.Context, t *domain.ProjectTemplate) error
-	update     func(ctx context.Context, t *domain.ProjectTemplate) error
-	deactivate func(ctx context.Context, id uuid.UUID) error
+	list      func(ctx context.Context, filter ports.ListTemplatesFilter) ([]*domain.ProjectTemplate, error)
+	getByID   func(ctx context.Context, id uuid.UUID) (*domain.ProjectTemplate, error)
+	create    func(ctx context.Context, t *domain.ProjectTemplate) error
+	setActive func(ctx context.Context, id uuid.UUID, active bool) error
 }
 
 func (m *mockTemplateRepo) List(ctx context.Context, f ports.ListTemplatesFilter) ([]*domain.ProjectTemplate, error) {
@@ -31,17 +27,11 @@ func (m *mockTemplateRepo) List(ctx context.Context, f ports.ListTemplatesFilter
 func (m *mockTemplateRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.ProjectTemplate, error) {
 	return m.getByID(ctx, id)
 }
-func (m *mockTemplateRepo) GetBySlug(ctx context.Context, slug string) (*domain.ProjectTemplate, error) {
-	return m.getBySlug(ctx, slug)
-}
 func (m *mockTemplateRepo) Create(ctx context.Context, t *domain.ProjectTemplate) error {
 	return m.create(ctx, t)
 }
-func (m *mockTemplateRepo) Update(ctx context.Context, t *domain.ProjectTemplate) error {
-	return m.update(ctx, t)
-}
-func (m *mockTemplateRepo) Deactivate(ctx context.Context, id uuid.UUID) error {
-	return m.deactivate(ctx, id)
+func (m *mockTemplateRepo) SetActive(ctx context.Context, id uuid.UUID, active bool) error {
+	return m.setActive(ctx, id, active)
 }
 
 func newTestSvc(repo ports.TemplateRepository) *TemplateService {
@@ -50,10 +40,13 @@ func newTestSvc(repo ports.TemplateRepository) *TemplateService {
 
 // validInput is a minimal valid CreateTemplateInput for reuse across tests.
 var validInput = ports.CreateTemplateInput{
-	Name:               "Go REST API",
-	Slug:               "go-rest-api",
-	Language:           "go",
-	DockerfileTemplate: "FROM golang:1.26-alpine",
+	Name:             "Go Modular Monolith",
+	Slug:             "go-modular-monolith",
+	Version:          "v1.0.0",
+	Language:         "go",
+	Framework:        "fiber",
+	SourceRepository: "https://github.com/example/go-modular-monolith-v1",
+	SourceCommit:     "0123456789abcdef0123456789abcdef01234567",
 }
 
 // -- Create ------------------------------------------------------------------
@@ -116,15 +109,34 @@ func TestCreate_ProvidedJSONBNotOverwritten(t *testing.T) {
 func TestCreate_RepoError(t *testing.T) {
 	repo := &mockTemplateRepo{
 		create: func(_ context.Context, _ *domain.ProjectTemplate) error {
-			return domain.ErrSlugAlreadyExists
+			return domain.ErrTemplateVersionExists
 		},
 	}
 	_, err := newTestSvc(repo).Create(context.Background(), validInput)
 	if err == nil {
 		t.Fatal("expected error from repo")
 	}
-	if !errors.Is(err, domain.ErrSlugAlreadyExists) {
-		t.Errorf("expected ErrSlugAlreadyExists, got %v", err)
+	if !errors.Is(err, domain.ErrTemplateVersionExists) {
+		t.Errorf("expected ErrTemplateVersionExists, got %v", err)
+	}
+}
+
+func TestCreate_InvalidPublicationDoesNotPersist(t *testing.T) {
+	input := validInput
+	input.SourceCommit = "not-a-sha"
+	called := false
+	repo := &mockTemplateRepo{
+		create: func(_ context.Context, _ *domain.ProjectTemplate) error {
+			called = true
+			return nil
+		},
+	}
+	_, err := newTestSvc(repo).Create(context.Background(), input)
+	if !errors.Is(err, domain.ErrInvalidTemplate) {
+		t.Fatalf("expected ErrInvalidTemplate, got %v", err)
+	}
+	if called {
+		t.Fatal("invalid template must not be persisted")
 	}
 }
 
@@ -199,29 +211,38 @@ func TestGetByID_NotFound(t *testing.T) {
 
 // -- Update ------------------------------------------------------------------
 
-func TestUpdate_PartialFields(t *testing.T) {
+func TestUpdate_ChangesOnlyVisibility(t *testing.T) {
 	existing := &domain.ProjectTemplate{
-		ID:       uuid.New(),
-		Name:     "Old Name",
-		Language: "go",
-		IsActive: true,
+		ID:               uuid.New(),
+		Name:             "Go Modular Monolith",
+		Slug:             "go-modular-monolith",
+		Version:          "v1.0.0",
+		Language:         "go",
+		Framework:        "fiber",
+		SourceRepository: "https://github.com/example/go-modular-monolith-v1",
+		SourceCommit:     "0123456789abcdef0123456789abcdef01234567",
+		IsActive:         true,
 	}
-	var saved *domain.ProjectTemplate
+	var savedActive bool
 	repo := &mockTemplateRepo{
 		getByID: func(_ context.Context, _ uuid.UUID) (*domain.ProjectTemplate, error) { return existing, nil },
-		update:  func(_ context.Context, t *domain.ProjectTemplate) error { saved = t; return nil },
+		setActive: func(_ context.Context, _ uuid.UUID, active bool) error {
+			savedActive = active
+			return nil
+		},
 	}
+	inactive := false
 	_, err := newTestSvc(repo).Update(context.Background(), existing.ID, ports.UpdateTemplateInput{
-		Name: strPtr("New Name"),
+		IsActive: &inactive,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved.Name != "New Name" {
-		t.Errorf("Name not updated: %v", saved.Name)
+	if savedActive {
+		t.Error("expected visibility to be disabled")
 	}
-	if saved.Language != "go" {
-		t.Errorf("Language should be unchanged: %v", saved.Language)
+	if existing.Name != "Go Modular Monolith" {
+		t.Errorf("published metadata changed: %q", existing.Name)
 	}
 }
 
@@ -230,7 +251,12 @@ func TestUpdate_IsActiveFalse(t *testing.T) {
 	existing := &domain.ProjectTemplate{ID: uuid.New(), IsActive: true}
 	repo := &mockTemplateRepo{
 		getByID: func(_ context.Context, _ uuid.UUID) (*domain.ProjectTemplate, error) { return existing, nil },
-		update:  func(_ context.Context, _ *domain.ProjectTemplate) error { return nil },
+		setActive: func(_ context.Context, _ uuid.UUID, active bool) error {
+			if active {
+				t.Error("expected inactive state to be persisted")
+			}
+			return nil
+		},
 	}
 	updated, err := newTestSvc(repo).Update(context.Background(), existing.ID, ports.UpdateTemplateInput{
 		IsActive: &f,
@@ -243,13 +269,21 @@ func TestUpdate_IsActiveFalse(t *testing.T) {
 	}
 }
 
+func TestUpdate_RequiresVisibility(t *testing.T) {
+	_, err := newTestSvc(&mockTemplateRepo{}).Update(context.Background(), uuid.New(), ports.UpdateTemplateInput{})
+	if !errors.Is(err, domain.ErrInvalidTemplate) {
+		t.Fatalf("expected ErrInvalidTemplate, got %v", err)
+	}
+}
+
 func TestUpdate_NotFound(t *testing.T) {
+	active := true
 	repo := &mockTemplateRepo{
 		getByID: func(_ context.Context, _ uuid.UUID) (*domain.ProjectTemplate, error) {
 			return nil, domain.ErrTemplateNotFound
 		},
 	}
-	_, err := newTestSvc(repo).Update(context.Background(), uuid.New(), ports.UpdateTemplateInput{Name: strPtr("x")})
+	_, err := newTestSvc(repo).Update(context.Background(), uuid.New(), ports.UpdateTemplateInput{IsActive: &active})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -261,10 +295,11 @@ func TestUpdate_NotFound(t *testing.T) {
 func TestUpdate_RepoUpdateError(t *testing.T) {
 	existing := &domain.ProjectTemplate{ID: uuid.New(), Name: "Old"}
 	repo := &mockTemplateRepo{
-		getByID: func(_ context.Context, _ uuid.UUID) (*domain.ProjectTemplate, error) { return existing, nil },
-		update:  func(_ context.Context, _ *domain.ProjectTemplate) error { return errors.New("update failed") },
+		getByID:   func(_ context.Context, _ uuid.UUID) (*domain.ProjectTemplate, error) { return existing, nil },
+		setActive: func(_ context.Context, _ uuid.UUID, _ bool) error { return errors.New("update failed") },
 	}
-	_, err := newTestSvc(repo).Update(context.Background(), existing.ID, ports.UpdateTemplateInput{Name: strPtr("New")})
+	active := true
+	_, err := newTestSvc(repo).Update(context.Background(), existing.ID, ports.UpdateTemplateInput{IsActive: &active})
 	if err == nil {
 		t.Fatal("expected update error")
 	}
@@ -276,8 +311,11 @@ func TestDeactivate_Success(t *testing.T) {
 	id := uuid.New()
 	called := false
 	repo := &mockTemplateRepo{
-		deactivate: func(_ context.Context, got uuid.UUID) error {
+		setActive: func(_ context.Context, got uuid.UUID, active bool) error {
 			if got == id {
+				if active {
+					t.Error("deactivation must set active=false")
+				}
 				called = true
 			}
 			return nil
@@ -293,7 +331,7 @@ func TestDeactivate_Success(t *testing.T) {
 
 func TestDeactivate_NotFound(t *testing.T) {
 	repo := &mockTemplateRepo{
-		deactivate: func(_ context.Context, _ uuid.UUID) error { return domain.ErrTemplateNotFound },
+		setActive: func(_ context.Context, _ uuid.UUID, _ bool) error { return domain.ErrTemplateNotFound },
 	}
 	err := newTestSvc(repo).Deactivate(context.Background(), uuid.New())
 	if err == nil {

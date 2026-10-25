@@ -12,6 +12,7 @@ require (
 	github.com/zitadel/oidc/v3 v3.45.5
 	go.opentelemetry.io/otel v1.43.0
 	go.uber.org/zap v1.28.0
+	golang.org/x/mod v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
