@@ -48,3 +48,41 @@ func TestSpecDescribesAllCurrentOperations(t *testing.T) {
 		}
 	}
 }
+
+func TestTemplateContractUsesImmutableVersions(t *testing.T) {
+	var document struct {
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]any `yaml:"properties"`
+			} `yaml:"schemas"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(Spec, &document); err != nil {
+		t.Fatalf("parse embedded OpenAPI contract: %v", err)
+	}
+
+	create := document.Components.Schemas["CreateTemplateRequest"]
+	for _, field := range []string{"version", "source_repository", "source_commit"} {
+		if _, ok := create.Properties[field]; !ok {
+			t.Errorf("CreateTemplateRequest is missing %q", field)
+		}
+	}
+	if _, ok := create.Properties["dockerfile_template"]; ok {
+		t.Error("CreateTemplateRequest must not accept Dockerfile contents")
+	}
+
+	update := document.Components.Schemas["UpdateTemplateRequest"]
+	if len(update.Properties) != 1 {
+		t.Fatalf("UpdateTemplateRequest has %d fields, want only is_active", len(update.Properties))
+	}
+	if _, ok := update.Properties["is_active"]; !ok {
+		t.Error("UpdateTemplateRequest is missing is_active")
+	}
+
+	response := document.Components.Schemas["TemplateResponse"]
+	for _, field := range []string{"version", "source_repository", "source_commit"} {
+		if _, ok := response.Properties[field]; !ok {
+			t.Errorf("TemplateResponse is missing %q", field)
+		}
+	}
+}

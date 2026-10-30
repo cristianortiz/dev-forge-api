@@ -8,84 +8,54 @@ import (
 	"github.com/cristianortiz/dev-forge/internal/template/ports"
 )
 
-// ── Request types ─────────────────────────────────────────────────────────────
-
-// createTemplateRequest is the JSON body for POST /templates.
 type createTemplateRequest struct {
-	Name               string          `json:"name"                validate:"required"`
-	Slug               string          `json:"slug"                validate:"required"`
+	Name               string          `json:"name" validate:"required"`
+	Slug               string          `json:"slug" validate:"required"`
+	Version            string          `json:"version" validate:"required"`
 	Description        string          `json:"description"`
-	Language           string          `json:"language"            validate:"required"`
-	Framework          string          `json:"framework"`
-	DockerfileTemplate string          `json:"dockerfile_template" validate:"required"`
+	Language           string          `json:"language" validate:"required"`
+	Framework          string          `json:"framework" validate:"required"`
+	SourceRepository   string          `json:"source_repository" validate:"required,url"`
+	SourceCommit       string          `json:"source_commit" validate:"required,len=40"`
 	DefaultParams      json.RawMessage `json:"default_params"`
 	DefaultScopeConfig json.RawMessage `json:"default_scope_config"`
-	RepoTemplateURL    string          `json:"repo_template_url"    validate:"omitempty,url"`
 }
 
 func (r createTemplateRequest) toInput() ports.CreateTemplateInput {
 	return ports.CreateTemplateInput{
 		Name:               r.Name,
 		Slug:               r.Slug,
+		Version:            r.Version,
 		Description:        r.Description,
 		Language:           r.Language,
 		Framework:          r.Framework,
-		DockerfileTemplate: r.DockerfileTemplate,
+		SourceRepository:   r.SourceRepository,
+		SourceCommit:       r.SourceCommit,
 		DefaultParams:      []byte(r.DefaultParams),
 		DefaultScopeConfig: []byte(r.DefaultScopeConfig),
-		RepoTemplateURL:    r.RepoTemplateURL,
 	}
 }
 
-// updateTemplateRequest is the JSON body for PUT /templates/:id.
-// All string fields are pointers — omitted fields are nil and left unchanged.
 type updateTemplateRequest struct {
-	Name               *string         `json:"name"`
-	Description        *string         `json:"description"`
-	Language           *string         `json:"language"`
-	Framework          *string         `json:"framework"`
-	DockerfileTemplate *string         `json:"dockerfile_template"`
-	DefaultParams      json.RawMessage `json:"default_params"`
-	DefaultScopeConfig json.RawMessage `json:"default_scope_config"`
-	RepoTemplateURL    *string         `json:"repo_template_url" validate:"omitempty,url"`
-	IsActive           *bool           `json:"is_active"`
+	IsActive *bool `json:"is_active" validate:"required"`
 }
 
 func (r updateTemplateRequest) toInput() ports.UpdateTemplateInput {
-	var defaultParams, defaultScopeConfig []byte
-	if len(r.DefaultParams) > 0 {
-		defaultParams = []byte(r.DefaultParams)
-	}
-	if len(r.DefaultScopeConfig) > 0 {
-		defaultScopeConfig = []byte(r.DefaultScopeConfig)
-	}
-	return ports.UpdateTemplateInput{
-		Name:               r.Name,
-		Description:        r.Description,
-		Language:           r.Language,
-		Framework:          r.Framework,
-		DockerfileTemplate: r.DockerfileTemplate,
-		DefaultParams:      defaultParams,
-		DefaultScopeConfig: defaultScopeConfig,
-		RepoTemplateURL:    r.RepoTemplateURL,
-		IsActive:           r.IsActive,
-	}
+	return ports.UpdateTemplateInput{IsActive: r.IsActive}
 }
 
-// ── Response type ─────────────────────────────────────────────────────────────
-
-// templateResponse is the JSON representation of a ProjectTemplate.
 type templateResponse struct {
 	ID                 string          `json:"id"`
 	Name               string          `json:"name"`
 	Slug               string          `json:"slug"`
+	Version            string          `json:"version"`
 	Description        string          `json:"description"`
 	Language           string          `json:"language"`
 	Framework          string          `json:"framework"`
-	DockerfileTemplate string          `json:"dockerfile_template"`
+	SourceRepository   string          `json:"source_repository"`
+	SourceCommit       string          `json:"source_commit"`
 	DefaultParams      json.RawMessage `json:"default_params"`
 	DefaultScopeConfig json.RawMessage `json:"default_scope_config"`
-	RepoTemplateURL    string          `json:"repo_template_url"`
 	IsActive           bool            `json:"is_active"`
 	CreatedAt          string          `json:"created_at"`
 }
@@ -95,13 +65,14 @@ func toResponse(t *domain.ProjectTemplate) templateResponse {
 		ID:                 t.ID.String(),
 		Name:               t.Name,
 		Slug:               t.Slug,
+		Version:            t.Version,
 		Description:        t.Description,
 		Language:           t.Language,
 		Framework:          t.Framework,
-		DockerfileTemplate: t.DockerfileTemplate,
+		SourceRepository:   t.SourceRepository,
+		SourceCommit:       t.SourceCommit,
 		DefaultParams:      json.RawMessage(t.DefaultParams),
 		DefaultScopeConfig: json.RawMessage(t.DefaultScopeConfig),
-		RepoTemplateURL:    t.RepoTemplateURL,
 		IsActive:           t.IsActive,
 		CreatedAt:          t.CreatedAt.Format(time.RFC3339),
 	}

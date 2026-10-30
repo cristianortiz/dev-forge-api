@@ -38,7 +38,7 @@ paths:
       operationId: listTemplates
       tags: [templates]
       summary: List project templates
-      description: Returns the templates visible to the authenticated user.
+      description: Returns active published blueprint versions available for new applications.
       parameters:
         - name: language
           in: query
@@ -68,8 +68,8 @@ paths:
     post:
       operationId: createTemplate
       tags: [templates]
-      summary: Create a project template
-      description: Requires an authenticated user with the admin role.
+      summary: Publish a blueprint version
+      description: Requires an admin. The caller must run the blueprint publication gates first; the API validates metadata shape but does not fetch GitHub or run those gates.
       requestBody:
         required: true
         content:
@@ -77,25 +77,21 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateTemplateRequest"
             examples:
-              goFiberTemplate:
-                summary: Example Go and Fiber project template
+              goModularMonolith:
+                summary: Example Go modular monolith blueprint release
                 value:
-                  name: Go Fiber API
-                  slug: go-fiber-api-example
-                  description: A minimal Go API template.
+                  name: Go Modular Monolith
+                  slug: go-modular-monolith
+                  version: v1.0.0
+                  description: A curated Go API modular monolith scaffold.
                   language: go
                   framework: fiber
-                  dockerfile_template: |
-                    FROM golang:1.26-alpine
-                    WORKDIR /app
-                    COPY . .
-                    RUN go build -o server .
-                    CMD ["./server"]
+                  source_repository: https://github.com/example/go-modular-monolith-v1
+                  source_commit: 0123456789abcdef0123456789abcdef01234567
                   default_params:
                     PORT: "8080"
                   default_scope_config:
                     replicas: 1
-                  repo_template_url: https://github.com/example/go-fiber-api-template
       responses:
         "201":
           description: Template created.
@@ -148,7 +144,7 @@ paths:
       operationId: updateTemplate
       tags: [templates]
       summary: Partially update a project template
-      description: Requires an authenticated user with the admin role. Only supplied fields are changed.
+      description: Requires an authenticated user with the admin role. Only is_active can change; published metadata and source are immutable.
       requestBody:
         required: true
         content:
@@ -156,10 +152,10 @@ paths:
             schema:
               $ref: "#/components/schemas/UpdateTemplateRequest"
             examples:
-              updateDescription:
-                summary: Change a template description
+              deactivateVersion:
+                summary: Hide a published version from new applications
                 value:
-                  description: Updated example description.
+                  is_active: false
       responses:
         "200":
           description: Updated project template.
@@ -259,7 +255,7 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     Conflict:
-      description: A template with the same slug already exists.
+      description: A template version with the same slug and version already exists.
       content:
         application/json:
           schema:
@@ -293,14 +289,19 @@ components:
           enum: [admin, developer, viewer]
     CreateTemplateRequest:
       type: object
-      required: [name, slug, language, dockerfile_template]
+      required: [name, slug, version, language, framework, source_repository, source_commit]
       properties:
         name:
           type: string
           minLength: 1
         slug:
           type: string
-          minLength: 1
+          pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+          description: Stable lowercase blueprint identifier.
+        version:
+          type: string
+          pattern: "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)([-+][0-9A-Za-z.-]+)?$"
+          description: Immutable semantic version, including the v prefix.
         description:
           type: string
         language:
@@ -308,55 +309,44 @@ components:
           minLength: 1
         framework:
           type: string
-        dockerfile_template:
-          type: string
           minLength: 1
-        default_params:
-          $ref: "#/components/schemas/JSONValue"
-          description: Optional JSON configuration; defaults to an empty object.
-        default_scope_config:
-          $ref: "#/components/schemas/JSONValue"
-          description: Optional JSON scope configuration; defaults to an empty object.
-        repo_template_url:
+        source_repository:
           type: string
-          description: Optional URL; when non-empty it must be valid.
+          format: uri
+          description: HTTPS GitHub repository containing the immutable source snapshot.
+        source_commit:
+          type: string
+          pattern: "^[0-9a-fA-F]{40}$"
+          description: Full 40-character commit SHA for the published source.
+        default_params:
+          type: object
+          additionalProperties: true
+          description: Non-secret JSON configuration; defaults to an empty object.
+        default_scope_config:
+          type: object
+          additionalProperties: true
+          description: Non-secret JSON scope configuration; defaults to an empty object.
     UpdateTemplateRequest:
       type: object
+      required: [is_active]
       properties:
-        name:
-          type: string
-        description:
-          type: string
-        language:
-          type: string
-        framework:
-          type: string
-        dockerfile_template:
-          type: string
-        default_params:
-          $ref: "#/components/schemas/JSONValue"
-          description: Optional JSON configuration.
-        default_scope_config:
-          $ref: "#/components/schemas/JSONValue"
-          description: Optional JSON scope configuration.
-        repo_template_url:
-          type: string
-          description: Optional URL; when non-empty it must be valid.
         is_active:
           type: boolean
+          description: Whether this version is selectable for new applications.
     TemplateResponse:
       type: object
       required:
         - id
         - name
         - slug
+        - version
         - description
         - language
         - framework
-        - dockerfile_template
+        - source_repository
+        - source_commit
         - default_params
         - default_scope_config
-        - repo_template_url
         - is_active
         - created_at
       properties:
@@ -367,20 +357,26 @@ components:
           type: string
         slug:
           type: string
+        version:
+          type: string
+        source_repository:
+          type: string
+          format: uri
+        source_commit:
+          type: string
+          pattern: "^[0-9a-fA-F]{40}$"
         description:
           type: string
         language:
           type: string
         framework:
           type: string
-        dockerfile_template:
-          type: string
         default_params:
-          $ref: "#/components/schemas/JSONValue"
+          type: object
+          additionalProperties: true
         default_scope_config:
-          $ref: "#/components/schemas/JSONValue"
-        repo_template_url:
-          type: string
+          type: object
+          additionalProperties: true
         is_active:
           type: boolean
         created_at:
