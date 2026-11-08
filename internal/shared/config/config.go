@@ -12,6 +12,10 @@ type Config struct {
 	Environment string
 	Debug       bool
 
+	// ShutdownTimeout bounds how long in-flight HTTP requests may take to finish
+	// during graceful shutdown.
+	ShutdownTimeout time.Duration
+
 	Server   ServerConfig
 	Database DatabaseConfig
 	Zitadel  ZitadelConfig
@@ -60,12 +64,15 @@ type ZitadelConfig struct {
 	KeyPath  string // path to the JSON key file for JWT-profile introspection
 }
 
+// OTELConfig holds only the settings the application owns. Exporters, endpoint,
+// protocol, sampling and the metric interval are read by the OpenTelemetry SDK
+// from the standard OTEL_* variables (see internal/shared/telemetry).
 type OTELConfig struct {
-	Enabled        bool
-	ServiceName    string
-	ServiceVersion string
-	OTLPEndpoint   string // gRPC endpoint, e.g. localhost:4317
-	Environment    string
+	Enabled         bool
+	ServiceName     string
+	ServiceVersion  string
+	Environment     string
+	ShutdownTimeout time.Duration // flush budget for telemetry on shutdown
 }
 
 // LogLevel returns the desired zap log level from the LOG_LEVEL env var.
@@ -83,9 +90,16 @@ func (c *Config) LogLevel() string {
 // Load reads configuration from environment variables.
 // All values have sensible defaults for local development.
 func Load() (*Config, error) {
+	// A malformed OTEL_ENABLED must not silently disable telemetry.
+	otelEnabled, err := getEnvBoolStrict("OTEL_ENABLED", false)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
-		Environment: getEnv("ENVIRONMENT", "development"),
-		Debug:       getEnvBool("DEBUG", true),
+		Environment:     getEnv("ENVIRONMENT", "development"),
+		Debug:           getEnvBool("DEBUG", true),
+		ShutdownTimeout: getEnvDuration("SHUTDOWN_TIMEOUT", 15*time.Second),
 
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
@@ -113,11 +127,11 @@ func Load() (*Config, error) {
 		},
 
 		OTEL: OTELConfig{
-			Enabled:        getEnvBool("OTEL_ENABLED", false),
-			ServiceName:    getEnv("OTEL_SERVICE_NAME", "dev-forge"),
-			ServiceVersion: getEnv("OTEL_SERVICE_VERSION", "0.1.0"),
-			OTLPEndpoint:   getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317"),
-			Environment:    getEnv("ENVIRONMENT", "development"),
+			Enabled:         otelEnabled,
+			ServiceName:     getEnv("OTEL_SERVICE_NAME", "dev-forge"),
+			ServiceVersion:  getEnv("OTEL_SERVICE_VERSION", "0.1.0"),
+			Environment:     getEnv("ENVIRONMENT", "development"),
+			ShutdownTimeout: getEnvDuration("OTEL_SHUTDOWN_TIMEOUT", 5*time.Second),
 		},
 	}
 
@@ -130,6 +144,12 @@ func (c *Config) validate() error {
 	}
 	if c.Database.Host == "" {
 		return fmt.Errorf("DB_HOST is required")
+	}
+	if c.ShutdownTimeout <= 0 {
+		return fmt.Errorf("SHUTDOWN_TIMEOUT must be positive: %s", c.ShutdownTimeout)
+	}
+	if c.OTEL.ShutdownTimeout <= 0 {
+		return fmt.Errorf("OTEL_SHUTDOWN_TIMEOUT must be positive: %s", c.OTEL.ShutdownTimeout)
 	}
 	return nil
 }
@@ -159,6 +179,20 @@ func getEnvBool(key string, defaultValue bool) bool {
 		}
 	}
 	return defaultValue
+}
+
+// getEnvBoolStrict is like getEnvBool but reports a malformed value instead of
+// falling back to the default.
+func getEnvBoolStrict(key string, defaultValue bool) (bool, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("invalid %s %q: expected true or false", key, v)
+	}
+	return b, nil
 }
 
 func getEnvDuration(key string, defaultValue time.Duration) time.Duration {

@@ -1,0 +1,7 @@
+services:
+  otel-lgtm:
+    volumes:
+      - observability_data:/data
+
+volumes:
+  observability_data:

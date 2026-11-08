@@ -6,6 +6,30 @@ volumes:
   postgres_data:
 
 services:
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.39.0
+    profiles: [observability]
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./grafana/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards/custom:ro
+      - ./grafana/provisioning/dev-forge.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/dev-forge.yaml:ro
+    networks:
+      - dev-forge-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  telemetrygen:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen@sha256:15d68d61c8f3848bcf8cdd09ff05d11b26d749d049a8ab2db5b08aa5bbf14bf7
+    profiles: [observability-smoke]
+    networks:
+      - dev-forge-net
+
   # ──────────────────────────────────────────────
   # PostgreSQL 16 — two databases: dev_forge + zitadel
   # ──────────────────────────────────────────────

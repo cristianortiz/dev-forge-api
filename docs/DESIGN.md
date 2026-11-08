@@ -172,9 +172,8 @@ De las 20 capturas analizadas, Nully expone estos conceptos:
                             │ control DB   │ │ repos        │ │ API / RBAC   │ │ aislado      │
                             └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
                               Observability Stack (objetivo, en el cluster):
-                              Apps/API → OTLP → Collector Contrib → Tempo → Grafana (traces)
-                              Apps/API /metrics ────────────────> Prometheus → Grafana (metrics)
-                              Kubernetes stdout → Collector Contrib → Loki → Grafana (logs)
+                              Apps/API → OTLP (traces + métricas + logs) → Collector Contrib → Tempo / Prometheus / Loki → Grafana
+                              Kubernetes / exporters → scrape → Prometheus → Grafana (métricas de cluster)
 ```
 
 ### Patrón Hexagonal por Módulo
@@ -274,7 +273,6 @@ El repositorio generado contiene el código, Dockerfile y CI de validación que 
 | **ConfigMap / Secret**     | Generado desde Parameters          | `client-go` → K8s API Server                                                                                                                     |
 | **Resource limits**        | Scope config (DB)                  | Inyectado en el Deployment object                                                                                                                |
 | **OTEL env vars**          | Constantes internas                | Inyectadas en el Deployment object                                                                                                               |
-| **Prometheus annotations** | Constantes internas                | Inyectadas en el Deployment metadata                                                                                                             |
 
 Los manifests se construyen como **objetos Go tipados** (`appsv1.Deployment`, etc.), no como templates YAML:
 
@@ -285,10 +283,6 @@ func (c *K8sClient) ApplyDeployment(ctx context.Context, opts DeployOpts) error 
         ObjectMeta: metav1.ObjectMeta{
             Name:      opts.AppName,
             Namespace: opts.Namespace,
-            Annotations: map[string]string{
-                "prometheus.io/scrape": "true",
-                "prometheus.io/port":   strconv.Itoa(opts.Port),
-            },
         },
         Spec: appsv1.DeploymentSpec{
             Replicas: &opts.Replicas,
@@ -447,38 +441,41 @@ La arquitectura separa **señales**, **recolección**, **almacenamiento** y **co
 
 | Concepto            | Responsabilidad en dev-forge                                                                                                                                                                                       |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Instrumentación     | SDKs OpenTelemetry generan spans y métricas; las métricas se exponen en `/metrics`. Zap escribe logs JSON a stdout.                                                                                                |
-| Collector           | OpenTelemetry Collector Contrib como DaemonSet recibe traces OTLP, añade contexto de Kubernetes, recoge stdout/stderr y exporta traces/logs.                                                                       |
+| Instrumentación     | SDKs OpenTelemetry generan spans, métricas y logs (bridge `otelzap`); las tres señales se exportan por OTLP/HTTP. Zap escribe además a stdout, solo para consola y `kubectl logs`.                                |
+| Collector           | OpenTelemetry Collector Contrib recibe OTLP de las apps y exporta traces a Tempo, métricas a Prometheus y logs a Loki. Un recolector de stdout (`filelog`, DaemonSet) es una adición futura solo para workloads que no emitan OTLP. |
 | Backend de traces   | Tempo almacena y consulta traces. Recibe OTLP del Collector.                                                                                                                                                       |
-| Backend de métricas | Prometheus scrapea `/metrics` de las apps y métricas nativas del cluster. No hay un salto intermedio por el Collector.                                                                                             |
-| Backend de logs     | Loki almacena logs estructurados exportados por el Collector. El logger de cada app añade IDs de trace/span cuando hay span activo; el Collector no infiere esa relación. Los IDs son campos, no labels indexados. |
+| Backend de métricas | Prometheus almacena las métricas de las apps recibidas por OTLP (receptor OTLP habilitado o remote-write desde el Collector) y scrapea las métricas nativas del cluster.                                          |
+| Backend de logs     | Loki almacena los logs que las apps exportan por OTLP. El logger de cada app añade IDs de trace/span cuando hay span activo; el Collector no infiere esa relación. Los IDs son campos (metadato estructurado), no labels indexados. |
 | Interfaz            | Grafana consulta Tempo, Prometheus y Loki; contiene dashboards, Explore y enlaces log ↔ trace.                                                                                                                     |
 
 ```text
-API y apps instrumentadas ── OTLP traces ────────> OpenTelemetry Collector Contrib ──> Tempo ──┐
-Kubernetes stdout/stderr ── filelog receiver ────> OpenTelemetry Collector Contrib ──> Loki ────┤
-API y apps instrumentadas ── /metrics ──────────> Prometheus scrape ────────────────────────────┤──> Grafana
-Kubernetes / exporters ───── /metrics ──────────> Prometheus scrape ────────────────────────────┘
+API y apps instrumentadas ── OTLP (traces + métricas + logs) ──> OpenTelemetry Collector Contrib ──┬──> Tempo ──────┐
+                                                                                                   ├──> Prometheus ─┤──> Grafana
+                                                                                                   └──> Loki ───────┤
+Kubernetes / exporters ───── scrape ─────────────────────────────────────────────────> Prometheus ─────────────────┘
 ```
+
+En local, el contenedor `grafana/otel-lgtm` (versión fijada) agrupa Collector, backends y Grafana para desarrollo y pruebas; no es el stack del homelab. Detalle de implementación en [OBSERVABILITY-PLAN.md](../OBSERVABILITY-PLAN.md); análisis y decisiones en [OBSERVABILITY.md](../OBSERVABILITY.md).
 
 #### Dos objetivos de observabilidad
 
 1. **Control plane:** observar la propia API dev-forge, PostgreSQL y los procesos de build/deploy. Las trazas deben conectar HTTP → caso de uso → dependencias instrumentadas, sin crear spans redundantes en cada llamada interna.
-2. **Workloads administrados:** observar las aplicaciones desplegadas por dev-forge. Los templates definen cómo emitir OTLP y exponer métricas; la recolección de logs de contenedor no requiere modificar la aplicación.
+2. **Workloads administrados:** observar las aplicaciones desplegadas por dev-forge. Los templates definen cómo emitir OTLP (trazas, métricas y logs) mediante variables `OTEL_*` inyectadas por dev-forge.
 
 El módulo `observe` es una **capacidad de producto**, no otro backend: autoriza consultas a Loki/Prometheus para una app y scope. Los endpoints de logs consultan Loki (incluido el tail en vivo); no consultan Kubernetes como una fuente paralela. Las métricas consultan Prometheus. Esto mantiene una fuente de verdad por señal y permite aplicar autorización antes de devolver datos.
 
 #### Decisiones operativas y límites
 
-- **Una ruta por señal:** OTLP para traces; scrape Prometheus para métricas; stdout JSON para logs. No duplicar logs vía Zap→OTLP y stdout→Collector. No desplegar Jaeger, Tempo, Promtail y Alloy simultáneamente.
-- **OpenTelemetry como contrato, no como almacenamiento:** `OTEL_EXPORTER_OTLP_ENDPOINT` apunta al Collector, no a Tempo. Cambiar el backend no requiere cambiar los SDKs de las apps.
+- **Una ruta por señal:** OTLP para las tres señales (traces, métricas y logs) hacia un único endpoint; stdout no se ingiere, por lo que un log llega a Loki una sola vez. No desplegar Jaeger, Tempo, Promtail y Alloy simultáneamente.
+- **OpenTelemetry como contrato, no como almacenamiento:** `OTEL_EXPORTER_OTLP_ENDPOINT` apunta al Collector, no a Tempo. Cambiar el backend no requiere cambiar los SDKs de las apps. En local y en el homelab la app es la misma; solo cambian variables de entorno.
+- **Configuración inválida frente a indisponibilidad:** una configuración OTEL inválida (exporter, protocolo o sampler desconocido) hace fallar el arranque con un error explícito; un Collector o backend caído no afecta la operación.
 - **Tolerancia a fallos:** exportación asíncrona, batch, timeout y colas acotadas. Si el Collector o un backend no está disponible, las requests de negocio, `/health` y `/ready` siguen funcionando; telemetría puede perderse cuando se agote la cola. La API no debe bloquear esperando al backend.
 - **Cardinalidad y privacidad:** usar nombres de ruta normalizados y atributos de recurso estables (`service.name`, versión, entorno, namespace). No usar IDs de usuario, app, request, trace ni valores arbitrarios como labels de métricas/Loki. No exportar tokens, headers de autorización, cuerpos de request ni secretos; revisar/redactar atributos antes de exportar.
 - **Perfil inicial del homelab:** una instancia por backend, recursos y retención limitados, PVCs y backups verificados. Es persistencia de nodo único, no HA ni un SLA de producción: una caída del nodo interrumpe consulta/ingesta y la pérdida del volumen pierde datos posteriores al último backup.
 - **Perfil durable de producción:** Tempo y Loki usan almacenamiento de objetos compatible y respaldado; Prometheus tiene retención, backup y recuperación definidos. Se habilitan autenticación/TLS, RBAC, límites de recursos y alertas sobre API/pipeline. Esto mejora durabilidad pero no garantiza HA.
 - **Alta disponibilidad (opcional y posterior):** réplicas, almacenamiento compartido, distribución de Collector y pruebas de fallo/recuperación. No llamarlo HA hasta verificar el comportamiento ante pérdida de nodo y backend. Retención y sampling son configurables por entorno, nunca valores embebidos en el código.
 
-dev-forge opera en dos roles: como **app instrumentada** (emite telemetría estándar) y como **gestor** (inyecta en los Deployments endpoint OTLP, atributos de entorno y configuración de scrape/logs). La disponibilidad de observabilidad no forma parte de la disponibilidad de serving de la API.
+dev-forge opera en dos roles: como **app instrumentada** (emite telemetría estándar) y como **gestor** (inyecta en los Deployments el endpoint OTLP y los atributos de recurso mediante variables `OTEL_*`; no requiere anotaciones de scrape ni configuración de recolección de logs). La disponibilidad de observabilidad no forma parte de la disponibilidad de serving de la API.
 
 ---
 
@@ -708,7 +705,7 @@ La lectura de la tabla es:
 | Repos, branches y webhooks de GitHub           | **Pendiente**: no está cableado                    | Integración prevista para la Fase 1                                                |
 | Build de imágenes                              | **Pendiente**: no hay runner conectado             | Añadir runner aislado; el proceso API no debe ejecutar Docker SDK                  |
 | Scopes y despliegue en Kubernetes              | **Pendiente**: solo está definido el diseño        | Implementar con `client-go` y objetos tipados                                      |
-| Trazas, métricas y logs centralizados          | **Pendiente**: stack no conectado                  | Instrumentar OTLP/Tempo, Prometheus y stdout/Loki en la Fase 4                     |
+| Trazas, métricas y logs centralizados          | **Parcial**: la API exporta trazas y métricas por OTLP al laboratorio local; logs de la app y homelab pendientes | Completar logs por OTLP, dashboards y despliegue en el homelab en la Fase 4; ver `OBSERVABILITY-PLAN.md` |
 | Logs de pods, approvals, audit y notifications | **Pendiente**: módulos no cableados                | Implementar únicamente dentro del alcance de cada fase                             |
 | OpenAPI 3.2 + Scalar                           | **Disponible** para los endpoints existentes       | Contrato canónico en YAML; lint y pruebas con `make openapi-check`                 |
 | Servicios y secretos                           | **Pendiente**: no hay provisioning implementado    | Definir primero la conexión segura a PostgreSQL; no asumir provisioning vía Docker |
@@ -767,7 +764,7 @@ La lectura de la tabla es:
 - **Auth:** Zitadel SDK (`github.com/zitadel/zitadel-go/v3`)
 - **Builds:** runner aislado (BuildKit rootless o equivalente; elección pendiente)
 - **K8s:** client-go (`k8s.io/client-go`)
-- **Telemetry:** OTEL SDK (`go.opentelemetry.io/otel`)
+- **Telemetry:** OTEL SDK (`go.opentelemetry.io/otel`), `contrib/exporters/autoexport`, middleware `github.com/gofiber/contrib/v3/otel`, `otelpgx`
 - **API docs:** contrato OpenAPI 3.2 en `docs/openapi/openapi.yaml`; Scalar servido en `/api/v1/docs`
 - **Testing:** stdlib + testify + testcontainers-go
 
@@ -783,9 +780,9 @@ La lectura de la tabla es:
 
 ### Observability Stack
 
-- Traces: OTEL SDK → OTLP → Collector Contrib → Tempo → Grafana
-- Metrics: OTEL MeterProvider con exporter Prometheus → `/metrics` → Prometheus scrape → Grafana; Prometheus también scrapea métricas del cluster
-- Logs: Zap JSON enriquecido con `trace_id`/`span_id` desde el contexto → stdout → Collector Contrib (`filelog`) → Loki → Grafana
+- Traces, métricas y logs: OTEL SDK → OTLP/HTTP → Collector Contrib → Tempo / Prometheus / Loki → Grafana. Prometheus también scrapea métricas del cluster
+- Logs: Zap con bridge `otelzap` y contexto del span (`trace_id`/`span_id`); stdout solo para consola, sin ingesta
+- Local: `grafana/otel-lgtm` con versión fijada (solo dev/test)
 - Product APIs: `observe/logs` consulta/tail de Loki y `observe/metrics` consulta Prometheus, aplicando autorización por app/scope
 
 ---
@@ -811,7 +808,7 @@ El repo versionado contiene los archivos que necesita el equipo para desarrollar
 | Persistencia   | PostgreSQL/pgx y migraciones. Compose local provee PostgreSQL para desarrollo; Zitadel es externo (Cloud) en la configuración actual. La imagen de la app no empaqueta una DB. La conexión desplegada requiere parámetros secretos y un endpoint PostgreSQL; acordar su alcance mínimo antes del primer recorrido deployable. |
 | Runtime        | Configuración externa, graceful shutdown, readiness y liveness diferenciadas. Liveness no falla porque una dependencia remota esté temporalmente caída.                                                                                                                                                                       |
 | Contenedor     | Dockerfile multi-stage, usuario no root, build reproducible, imágenes base con versiones controladas y sin secretos ni herramientas de build en la imagen final. El gate valida el Dockerfile real.                                                                                                                           |
-| Observabilidad | Logs JSON a stdout, trazas OTEL por OTLP hacia la configuración inyectada por dev-forge y métricas en `/metrics`. Sin URL de backend, credenciales ni dependencia obligatoria de que el stack de observabilidad esté disponible.                                                                                              |
+| Observabilidad | Trazas, métricas y logs por OTLP hacia la configuración inyectada por dev-forge (variables `OTEL_*`); stdout solo para consola. Sin URL de backend, credenciales ni dependencia obligatoria de que el stack de observabilidad esté disponible.                                                                                              |
 | Seguridad      | Auth OIDC/Zitadel disponible en el chassis con health endpoints públicos; configuración mediante variables/secretos externos. Sin credenciales dentro del repo, workflow ni imagen.                                                                                                                                           |
 | CI             | GitHub Actions ejecuta tests, lint y verificaciones de dependencias en PR. No despliega ni publica automáticamente a un cluster.                                                                                                                                                                                              |
 | Entrega        | El Dockerfile pertenece al repo; dev-forge construye y publica la imagen y es el único responsable del despliegue. No se generan manifests K8s ni un workflow de CD duplicado.                                                                                                                                                |

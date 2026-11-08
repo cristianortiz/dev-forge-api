@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	sharedlogger "github.com/cristianortiz/dev-forge/internal/shared/logger"
 	"github.com/cristianortiz/dev-forge/internal/template/domain"
 	"github.com/cristianortiz/dev-forge/internal/template/ports"
 )
@@ -76,11 +77,10 @@ func (s *TemplateService) Create(ctx context.Context, input ports.CreateTemplate
 		return nil, fmt.Errorf("template: publish: %w", err)
 	}
 
-	s.logger.Info("template version published",
+	sharedlogger.WithContext(s.logger, ctx).Info("template version published",
 		zap.String("id", t.ID.String()),
 		zap.String("slug", t.Slug),
 		zap.String("version", t.Version),
-		zap.String("source_repository", t.SourceRepository),
 		zap.String("source_commit", t.SourceCommit),
 	)
 	return t, nil
@@ -103,7 +103,7 @@ func (s *TemplateService) Update(ctx context.Context, id uuid.UUID, input ports.
 		return nil, fmt.Errorf("template: update visibility: %w", err)
 	}
 
-	s.logger.Info("template version visibility changed",
+	sharedlogger.WithContext(s.logger, ctx).Info("template version visibility changed",
 		zap.String("id", t.ID.String()),
 		zap.Bool("is_active", t.IsActive),
 	)
@@ -115,6 +115,6 @@ func (s *TemplateService) Deactivate(ctx context.Context, id uuid.UUID) error {
 	if err := s.repo.SetActive(ctx, id, false); err != nil {
 		return fmt.Errorf("template: deactivate: %w", err)
 	}
-	s.logger.Info("template version deactivated", zap.String("id", id.String()))
+	sharedlogger.WithContext(s.logger, ctx).Info("template version deactivated", zap.String("id", id.String()))
 	return nil
 }

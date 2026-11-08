@@ -6,7 +6,7 @@
 > **Diseño y arquitectura:** [docs/DESIGN.md](docs/DESIGN.md)
 > **Schema de base de datos:** [docs/db-schema.md](docs/db-schema.md)
 
-**Última actualización:** 2026-10-25
+**Última actualización:** 2026-11-01
 **Estado global:** 🔵 En progreso — Fase 1: auth ✅ + Fiber v3 ✅ + OpenAPI 3.2/Scalar ✅; modelo y API del catálogo versionado implementados; falta publicar un snapshot real y completar la creación de apps (1.6–1.10)
 
 ---
@@ -31,7 +31,7 @@
 | 1 | Auth (Zitadel) + Applications + Blueprints + Git | 🔵 | 5/13 ✅ + 1.5, 1.7, 1.10 🔵; 1.6 ⏸️ |
 | 2 | Build → Release → Deploy Pipeline | ⬜ | 0/11 |
 | 3 | Configuration + Services | ⬜ | 0/6 |
-| 4 | Observabilidad (OTEL + Grafana Stack) | ⬜ | 0/9 |
+| 4 | Observabilidad (OTEL + Grafana Stack) | 🔵 | 2/9 ✅ + 4.4 🔵 |
 | 5 | Governance + Audit + Notifications | ⬜ | 0/8 |
 | 6 | Self-Deploy + Portfolio Ready | ⬜ | 0/9 |
 
@@ -203,7 +203,7 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
 | 1.2 | Módulo `auth`: ports + service (validar token, sync user, get me) | ✅ | 2026-05-02 | 2026-05-21 | zitadel/oidc/v3 introspection; JWT Profile con key RSA |
 | 1.3 | Módulo `auth`: middleware Zitadel + `RequireRole` | ✅ | 2026-05-02 | 2026-05-02 | `internal/shared/middleware/auth.go`; claim `urn:zitadel:iam:org:project:roles` |
 | 1.4 | Módulo `template`: domain + ports + usecase para catálogo de versiones inmutables | ✅ | 2026-10-09 | 2026-10-25 | `ProjectTemplate` ahora identifica `slug + version`, exige URL GitHub y SHA completos, valida defaults sin claves sensibles y solo permite cambiar visibilidad después de publicar |
-| 1.5 | Módulo `template`: adapters para listar/publicar/desactivar versiones validadas | 🔵 | 2026-10-25 | — | API y PostgreSQL persisten versiones inmutables; se probó listar, obtener por ID, desactivar/reactivar y filtrar inactivos. PATCH acepta solo `is_active`. Falta enlazar la publicación a evidencia automatizada de los gates del repo fuente |
+| 1.5 | Módulo `template`: adapters para listar/publicar/desactivar versiones validadas | 🔵 | 2026-10-25 | — | API y PostgreSQL persisten versiones inmutables; se probó publicar (201), rechazar slug+versión duplicados (409), listar, obtener por ID y desactivar/reactivar. PATCH acepta solo `is_active`. Falta enlazar la publicación a evidencia automatizada de los gates del repo fuente |
 | 1.6 | Seed del blueprint inicial Go API — monolito modular | ⏸️ | — | — | Seed ejecutado para `go-modular-monolith@v1.0.0`; el snapshot apunta provisionalmente a `dev-forge-api` en `47b6e5cb548d65a3494ea537c34f068202e4c6d9`. Falta el repositorio curado del blueprint y evidencia de que pasó los gates |
 | 1.7 | Módulo `app`: domain + ports + usecase (CRUD y creación desde blueprint) | 🔵 | 2026-06-07 | — | Domain/ports/usecase base existen; conservar referencia a la versión exacta elegida y coordinar el estado de generación del repo |
 | 1.8 | Módulo `app`: adapters HTTP/PostgreSQL y provisioning idempotente | ⬜ | — | — | Reservar app, generar repo en GitHub, guardar URL; reintentos/reconciliación para fallos entre DB y GitHub |
@@ -354,17 +354,21 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
 ## Fase 4: Observabilidad (OTEL + Grafana Stack) ⬜
 
 > Objetivo: una instalación central para observar dev-forge y las apps que administra, con una ruta única por señal y sin acoplar la instrumentación de las apps a un backend concreto. La arquitectura, límites de resiliencia y términos están definidos en `docs/DESIGN.md`, sección 4.
+>
+> **Detalle de implementación y pruebas de la instrumentación y del laboratorio local:** [OBSERVABILITY-PLAN.md](OBSERVABILITY-PLAN.md) (fases F0–F7). Análisis y decisiones: [OBSERVABILITY.md](OBSERVABILITY.md). Este archivo solo lleva el estado por tarea; **no duplicar allí el detalle**.
+>
+> **Avance local (2026-11-01):** laboratorio Compose (`make obs-up`) y API instrumentada: trazas y métricas de HTTP y PostgreSQL, métricas de runtime y apagado con flush, verificados con tests y con la API real contra `otel-lgtm`. **Pendiente:** logs de la app por OTLP y correlación (4.6, OBSERVABILITY-PLAN F4), verificación automatizada y dashboards (F5), robustez y readiness (F6), blueprint (4.5) y homelab (4.1, 4.7–4.9). La configuración vive en `.env` (central, ignorado por Git); `.env.example` solo lista las variables.
 
-> Stack objetivo: OpenTelemetry SDK/OTLP + OpenTelemetry Collector Contrib; Tempo para traces, Prometheus para métricas, Loki para logs y Grafana como interfaz. El Collector Contrib se ejecuta como agente de nodo para recibir OTLP y recoger logs de contenedores; Prometheus también recoge métricas del cluster. No desplegar Jaeger, Promtail ni un segundo Collector en paralelo.
+> Stack objetivo: OpenTelemetry SDK + OTLP; las tres señales (traces, métricas y logs) viajan por OTLP/HTTP a un único endpoint (OpenTelemetry Collector Contrib), que las envía a Tempo (traces), Prometheus (métricas) y Loki (logs); Grafana es la interfaz. Prometheus también recoge métricas del cluster por scrape. Stdout queda solo para consola y `kubectl logs`; no se ingiere. Local: contenedor `grafana/otel-lgtm` con versión fijada (solo dev/test). No desplegar Jaeger, Promtail ni un segundo Collector en paralelo.
 
 | # | Tarea | Estado | Fecha inicio | Fecha fin | Notas |
 |---|---|---|---|---|---|
-| 4.1 | Desplegar backends y Collector Contrib en homelab | ⬜ | — | — | Tempo, Prometheus, Loki, Grafana y Collector Contrib; versiones fijadas, límites de recursos y retención acotada. PVC local sirve para homelab/no-HA; producción durable requiere object storage para Tempo/Loki y backups probados. |
-| 4.2 | Package `shared/telemetry`: OTEL SDK y configuración común | ⬜ | — | — | Traces por OTLP al Collector; métricas OTEL expuestas en `/metrics` para scrape directo; atributos `service.name`, versión y entorno; muestreo configurable; flush con timeout al apagar. |
-| 4.3 | Instrumentar HTTP: traces y métricas de requests | ⬜ | — | — | Rutas normalizadas y labels de baja cardinalidad; no incluir IDs de usuario/app en labels de métricas. |
-| 4.4 | Instrumentar PostgreSQL y flujos de negocio relevantes | ⬜ | — | — | Reutilizar `otelpgx`; spans en operaciones significativas de build/deploy, no spans redundantes en cada función. |
-| 4.5 | Instrumentar el blueprint soportado y propagar configuración | ⬜ | — | — | El blueprint Go inicial cumple §10 de `docs/DESIGN.md`: OTLP traces, `/metrics`, logs JSON a stdout; no publicar otro runtime hasta probar su contrato. |
-| 4.6 | Logs de contenedores a Loki y correlación con traces | ⬜ | — | — | Collector Contrib recoge stdout/stderr; logger de la app añade `trace_id`/`span_id` desde el contexto activo. Son campos, nunca labels indexados. No exportar el mismo log por dos rutas. |
+| 4.1 | Desplegar backends y Collector Contrib en homelab | ⬜ | — | — | Tempo, Prometheus, Loki, Grafana y Collector Contrib; versiones fijadas, límites de recursos y retención acotada. PVC local sirve para homelab/no-HA; producción durable requiere object storage para Tempo/Loki y backups probados. Prometheus debe aceptar OTLP (`--web.enable-otlp-receiver`) o recibir por remote-write desde el Collector. El homelab aún no está operativo: inventario y decisión Helm frente a `otel-lgtm` provisional en OBSERVABILITY-PLAN OP-7.3/7.4. |
+| 4.2 | Package `shared/telemetry`: OTEL SDK y configuración común | ✅ | 2026-11-01 | 2026-11-01 | Traces, métricas y logs por OTLP; configuración por variables estándar `OTEL_*` (`autoexport`); atributos `service.name`, versión y entorno; muestreo configurable; configuración inválida falla al arrancar y un backend caído no afecta requests; flush con timeout al apagar. Providers de logs creados; la integración de los logs de la app es 4.6. Verificado con tests y con la API real. Detalle: OBSERVABILITY-PLAN F0–F2. |
+| 4.3 | Instrumentar HTTP: traces y métricas de requests | ✅ | 2026-11-01 | 2026-11-01 | Middleware `gofiber/contrib/v3/otel`; rutas normalizadas y labels de baja cardinalidad (60 requests con IDs/rutas distintos → 2 series); probes excluidos; handlers y auth usan `c.Context()` para propagar el span. Detalle: OBSERVABILITY-PLAN F3. |
+| 4.4 | Instrumentar PostgreSQL y flujos de negocio relevantes | 🔵 | 2026-11-01 | — | `otelpgx` instalado y verificado (spans hijos del span HTTP, sin argumentos de consulta). **Falta:** spans en operaciones significativas de build/deploy, que aún no existen; no añadir spans redundantes en cada función. Detalle: OBSERVABILITY-PLAN F3 (OP-3.4, OP-3.6). |
+| 4.5 | Instrumentar el blueprint soportado y propagar configuración | ⬜ | — | — | El blueprint Go inicial cumple §10 de `docs/DESIGN.md` con el contrato OTLP: traces, métricas y logs por OTLP; stdout solo para consola. Se extrae de `dev-forge-api` una vez validado (OBSERVABILITY-PLAN F7, OP-7.5); no publicar otro runtime hasta probar su contrato. |
+| 4.6 | Logs a Loki por OTLP y correlación con traces | ⬜ | — | — | Bridge `otelzap` junto a stdout; el logger de la app añade `trace_id`/`span_id` desde el contexto activo. Son campos, nunca labels indexados. Un log llega a Loki una sola vez. La recolección de stdout con Collector `filelog` es una adición futura solo para workloads que no emitan OTLP. Detalle: OBSERVABILITY-PLAN F4. |
 | 4.7 | Módulo `observe/logs`: consultar y transmitir logs desde Loki | ⬜ | — | — | API autoriza por app/scope y consulta Loki; tail en vivo vía API de Loki. Evitar leer pods directamente con client-go como segunda fuente. |
 | 4.8 | Módulo `observe/metrics`: consultar Prometheus | ⬜ | — | — | Métricas de apps y cluster; consultas limitadas por app/scope y ventana temporal. |
 | 4.9 | Dashboards, alertas y validación operativa | ⬜ | — | — | Dashboards API/apps, alertas mínimas, control de acceso, retención, backup/restore y prueba de reinicio documentados. |
@@ -373,7 +377,7 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
 - [ ] Una request de API aparece en Tempo con spans HTTP, use case y PostgreSQL relacionados.
 - [ ] Una caída de Collector/backend no hace fallar requests de negocio ni readiness; errores de exportación quedan medibles y acotados.
 - [ ] Grafana muestra tasa de requests, latencia, errores, salud de infraestructura y métricas de las apps.
-- [ ] Logs JSON de API y pods llegan a Loki una sola vez, se pueden buscar y enlazar a Tempo por trace ID.
+- [ ] Logs de la API llegan a Loki por OTLP una sola vez, se pueden buscar y enlazar a Tempo por trace ID.
 - [ ] GET `/api/v1/apps/:id/logs?scope=X` y el stream en vivo solo permiten consultar logs autorizados de esa app/scope.
 - [ ] GET `/api/v1/apps/:id/metrics` devuelve series de Prometheus de esa app/scope dentro de límites de tiempo.
 - [ ] Reiniciar Collector y backends conserva datos dentro de la política de persistencia; retención y restauración de backup están probadas.
@@ -498,6 +502,9 @@ Para no dispersar esfuerzo, estos puntos **no** bloquean el recorrido y se atien
 | 2026-10-18 | Tarea 1.13 actualizada: contrato OpenAPI 3.2 canónico en `docs/openapi/openapi.yaml`, servido junto con Scalar offline; `make openapi-check` valida lint y representación servida |
 | 2026-10-25 | Tarea 1.4 implementada: dominio, ports y usecase para blueprint `slug + version`, fuente/commit obligatorios, defaults seguros y metadata inmutable |
 | 2026-10-25 | Catálogo adaptado: migración 000003, repositorio/API/OpenAPI versionados y seed de un solo blueprint condicionado a una fuente GitHub real; `go test ./...` pasa |
+| 2026-11-01 | Fase 4 ajustada (4.1, 4.2, 4.3, 4.4, 4.5, 4.6): las tres señales por OTLP a un único endpoint, sin `/metrics` ni recolección de stdout; laboratorio local con `grafana/otel-lgtm`; detalle de implementación y pruebas en `OBSERVABILITY-PLAN.md`. Ninguna tarea implementada aún |
+| 2026-11-01 | Preparación parcial y laboratorio local de observabilidad: dependencias OTEL existentes actualizadas y tres señales sintéticas verificadas en `otel-lgtm`. La API todavía no exporta las tres señales; homelab y tareas 4.1–4.9 siguen pendientes. |
+| 2026-11-01 | Tareas 4.2 y 4.3 completadas y 4.4 en progreso: paquete `shared/telemetry`, middleware OTEL de Fiber v3, `otelpgx`, apagado ordenado con flush. Verificado con tests y con la API real (traza HTTP → Zitadel → PostgreSQL, métricas de baja cardinalidad, salida 0 al apagar). Pendientes: logs OTLP y correlación (4.6), dashboards, blueprint y homelab. `.env` es la fuente central de configuración; `.env.example` solo enumera variables |
 
 ---
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/cristianortiz/dev-forge/internal/auth/domain"
 	"github.com/cristianortiz/dev-forge/internal/auth/ports"
+	sharedlogger "github.com/cristianortiz/dev-forge/internal/shared/logger"
 )
 
 // Fiber context local keys.
@@ -25,15 +26,15 @@ func Authenticated(authSvc ports.AuthService, logger *zap.Logger) fiber.Handler 
 			return fiber.NewError(fiber.StatusUnauthorized, "missing authorization header")
 		}
 
-		claims, err := authSvc.ValidateToken(c.RequestCtx(), rawToken)
+		claims, err := authSvc.ValidateToken(c.Context(), rawToken)
 		if err != nil {
-			logger.Debug("token validation failed", zap.Error(err))
+			sharedlogger.WithContext(logger, c.Context()).Debug("token validation failed", zap.Error(err))
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
 		}
 
-		user, err := authSvc.SyncUser(c.RequestCtx(), claims)
+		user, err := authSvc.SyncUser(c.Context(), claims)
 		if err != nil {
-			logger.Error("user sync failed", zap.Error(err))
+			sharedlogger.WithContext(logger, c.Context()).Error("user sync failed", zap.Error(err))
 			return fiber.NewError(fiber.StatusInternalServerError, "internal error")
 		}
 
