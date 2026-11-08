@@ -39,7 +39,9 @@ func TestLoad_Defaults(t *testing.T) {
 		{"OTEL.Enabled", cfg.OTEL.Enabled, false},
 		{"OTEL.ServiceName", cfg.OTEL.ServiceName, "dev-forge"},
 		{"OTEL.ServiceVersion", cfg.OTEL.ServiceVersion, "0.1.0"},
-		{"OTEL.OTLPEndpoint", cfg.OTEL.OTLPEndpoint, "localhost:4317"},
+		{"OTEL.Environment", cfg.OTEL.Environment, "development"},
+		{"OTEL.ShutdownTimeout", cfg.OTEL.ShutdownTimeout, 5 * time.Second},
+		{"ShutdownTimeout", cfg.ShutdownTimeout, 15 * time.Second},
 	}
 
 	for _, tt := range tests {
@@ -76,7 +78,8 @@ func TestLoad_FromEnv(t *testing.T) {
 	t.Setenv("OTEL_ENABLED", "true")
 	t.Setenv("OTEL_SERVICE_NAME", "my-service")
 	t.Setenv("OTEL_SERVICE_VERSION", "1.2.3")
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel.internal:4317")
+	t.Setenv("OTEL_SHUTDOWN_TIMEOUT", "3s")
+	t.Setenv("SHUTDOWN_TIMEOUT", "20s")
 
 	cfg, err := Load()
 	if err != nil {
@@ -108,7 +111,9 @@ func TestLoad_FromEnv(t *testing.T) {
 		{"OTEL.Enabled", cfg.OTEL.Enabled, true},
 		{"OTEL.ServiceName", cfg.OTEL.ServiceName, "my-service"},
 		{"OTEL.ServiceVersion", cfg.OTEL.ServiceVersion, "1.2.3"},
-		{"OTEL.OTLPEndpoint", cfg.OTEL.OTLPEndpoint, "otel.internal:4317"},
+		{"OTEL.Environment", cfg.OTEL.Environment, "production"},
+		{"OTEL.ShutdownTimeout", cfg.OTEL.ShutdownTimeout, 3 * time.Second},
+		{"ShutdownTimeout", cfg.ShutdownTimeout, 20 * time.Second},
 	}
 
 	for _, tt := range tests {
@@ -139,6 +144,28 @@ func TestLoad_ZeroPort(t *testing.T) {
 	_, err := Load()
 	if err == nil {
 		t.Error("Load() expected error for port 0, got nil")
+	}
+}
+
+func TestLoad_InvalidOTELEnabled(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("OTEL_ENABLED", "ture")
+
+	if _, err := Load(); err == nil {
+		t.Error("Load() expected error for malformed OTEL_ENABLED, got nil")
+	}
+}
+
+func TestLoad_NonPositiveShutdownTimeouts(t *testing.T) {
+	for _, name := range []string{"SHUTDOWN_TIMEOUT", "OTEL_SHUTDOWN_TIMEOUT"} {
+		t.Run(name, func(t *testing.T) {
+			clearEnv(t)
+			t.Setenv(name, "0s")
+
+			if _, err := Load(); err == nil {
+				t.Errorf("Load() expected error for %s=0s, got nil", name)
+			}
+		})
 	}
 }
 
@@ -227,7 +254,7 @@ func clearEnv(t *testing.T) {
 		"DB_MAX_CONN_IDLE_TIME", "DB_HEALTH_CHECK_INTERVAL",
 		"ZITADEL_ISSUER", "ZITADEL_CLIENT_ID",
 		"OTEL_ENABLED", "OTEL_SERVICE_NAME", "OTEL_SERVICE_VERSION",
-		"OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_SHUTDOWN_TIMEOUT", "SHUTDOWN_TIMEOUT",
 	}
 	for _, v := range vars {
 		t.Setenv(v, "")

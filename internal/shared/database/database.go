@@ -18,6 +18,25 @@ type DB struct {
 	logger *zap.Logger
 }
 
+// newTracer builds the pgx query tracer from the global providers, so it must be
+// created after telemetry.Setup. Spans are only recorded under a recording
+// parent (the HTTP request span), which keeps startup and background pool
+// activity out of the traces.
+//
+// Defaults worth knowing: db.query.text holds the SQL with $N placeholders and
+// query arguments are never recorded (that needs otelpgx.WithIncludeQueryParameters,
+// deliberately not used). Keep repositories parameterized: a value concatenated
+// into the SQL would reach the span. Span names carry the operation kind
+// ("query SELECT", "prepare SELECT"); without the prefix pgx's prepare step,
+// which runs inside the query on first use, would look like a duplicate query.
+func newTracer() *otelpgx.Tracer {
+	return otelpgx.NewTracer(
+		otelpgx.WithTracerProvider(otel.GetTracerProvider()),
+		otelpgx.WithMeterProvider(otel.GetMeterProvider()),
+		otelpgx.WithQuerySpanNamePrefix(),
+	)
+}
+
 // New creates and verifies a pgxpool connection pool.
 func New(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*DB, error) {
 	logger.Info("initializing PostgreSQL connection pool",
@@ -32,9 +51,7 @@ func New(ctx context.Context, cfg *config.Config, logger *zap.Logger) (*DB, erro
 	}
 
 	if cfg.OTEL.Enabled {
-		poolCfg.ConnConfig.Tracer = otelpgx.NewTracer(
-			otelpgx.WithTracerProvider(otel.GetTracerProvider()),
-		)
+		poolCfg.ConnConfig.Tracer = newTracer()
 		logger.Info("PostgreSQL OTEL tracing enabled")
 	}
 

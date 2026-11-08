@@ -13,6 +13,7 @@ import (
 
 	"github.com/cristianortiz/dev-forge/internal/auth/domain"
 	"github.com/cristianortiz/dev-forge/internal/auth/ports"
+	sharedlogger "github.com/cristianortiz/dev-forge/internal/shared/logger"
 )
 
 // AuthService implements ports.AuthService using OIDC token introspection.
@@ -83,9 +84,7 @@ func (s *AuthService) SyncUser(ctx context.Context, claims *ports.Claims) (*doma
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
-	s.logger.Info("new user synced from Zitadel",
-		zap.String("zitadel_id", claims.ZitadelID),
-		zap.String("email", claims.Email),
+	sharedlogger.WithContext(s.logger, ctx).Info("new user synced from Zitadel",
 		zap.String("role", string(role)),
 	)
 	return user, nil

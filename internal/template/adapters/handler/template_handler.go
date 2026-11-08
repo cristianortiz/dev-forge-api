@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	sharedlogger "github.com/cristianortiz/dev-forge/internal/shared/logger"
 	"github.com/cristianortiz/dev-forge/internal/shared/middleware"
 	"github.com/cristianortiz/dev-forge/internal/template/domain"
 	"github.com/cristianortiz/dev-forge/internal/template/ports"
@@ -46,9 +47,9 @@ func (h *TemplateHandler) list(c fiber.Ctx) error {
 		Language:  c.Query("language"),
 		Framework: c.Query("framework"),
 	}
-	templates, err := h.svc.List(c.RequestCtx(), filter)
+	templates, err := h.svc.List(c.Context(), filter)
 	if err != nil {
-		h.logger.Error("list templates", zap.Error(err))
+		sharedlogger.WithContext(h.logger, c.Context()).Error("list templates", zap.Error(err))
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to list templates")
 	}
 	result := make([]templateResponse, 0, len(templates))
@@ -63,12 +64,12 @@ func (h *TemplateHandler) getByID(c fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid template id")
 	}
-	t, err := h.svc.GetByID(c.RequestCtx(), id)
+	t, err := h.svc.GetByID(c.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrTemplateNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, "template not found")
 		}
-		h.logger.Error("get template", zap.String("id", c.Params("id")), zap.Error(err))
+		sharedlogger.WithContext(h.logger, c.Context()).Error("get template", zap.Error(err))
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to get template")
 	}
 	return c.JSON(toResponse(t))
@@ -76,7 +77,7 @@ func (h *TemplateHandler) getByID(c fiber.Ctx) error {
 
 func (h *TemplateHandler) create(c fiber.Ctx) error {
 	req := middleware.GetBody[createTemplateRequest](c)
-	t, err := h.svc.Create(c.RequestCtx(), req.toInput())
+	t, err := h.svc.Create(c.Context(), req.toInput())
 	if err != nil {
 		if errors.Is(err, domain.ErrTemplateVersionExists) {
 			return fiber.NewError(fiber.StatusConflict, "template version already exists")
@@ -84,7 +85,7 @@ func (h *TemplateHandler) create(c fiber.Ctx) error {
 		if errors.Is(err, domain.ErrInvalidTemplate) {
 			return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
 		}
-		h.logger.Error("create template", zap.Error(err))
+		sharedlogger.WithContext(h.logger, c.Context()).Error("create template", zap.Error(err))
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to create template")
 	}
 	return c.Status(fiber.StatusCreated).JSON(toResponse(t))
@@ -96,7 +97,7 @@ func (h *TemplateHandler) update(c fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid template id")
 	}
 	req := middleware.GetBody[updateTemplateRequest](c)
-	t, err := h.svc.Update(c.RequestCtx(), id, req.toInput())
+	t, err := h.svc.Update(c.Context(), id, req.toInput())
 	if err != nil {
 		if errors.Is(err, domain.ErrTemplateNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, "template not found")
@@ -104,7 +105,7 @@ func (h *TemplateHandler) update(c fiber.Ctx) error {
 		if errors.Is(err, domain.ErrInvalidTemplate) {
 			return fiber.NewError(fiber.StatusUnprocessableEntity, err.Error())
 		}
-		h.logger.Error("update template", zap.String("id", c.Params("id")), zap.Error(err))
+		sharedlogger.WithContext(h.logger, c.Context()).Error("update template", zap.Error(err))
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to update template")
 	}
 	return c.JSON(toResponse(t))
@@ -115,11 +116,11 @@ func (h *TemplateHandler) deactivate(c fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid template id")
 	}
-	if err := h.svc.Deactivate(c.RequestCtx(), id); err != nil {
+	if err := h.svc.Deactivate(c.Context(), id); err != nil {
 		if errors.Is(err, domain.ErrTemplateNotFound) {
 			return fiber.NewError(fiber.StatusNotFound, "template not found")
 		}
-		h.logger.Error("deactivate template", zap.String("id", c.Params("id")), zap.Error(err))
+		sharedlogger.WithContext(h.logger, c.Context()).Error("deactivate template", zap.Error(err))
 		return fiber.NewError(fiber.StatusInternalServerError, "failed to deactivate template")
 	}
 	return c.SendStatus(fiber.StatusNoContent)

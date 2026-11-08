@@ -13,6 +13,9 @@ services:
       - "127.0.0.1:3000:3000"
       - "127.0.0.1:4317:4317"
       - "127.0.0.1:4318:4318"
+    volumes:
+      - ./grafana/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards/custom:ro
+      - ./grafana/provisioning/dev-forge.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/dev-forge.yaml:ro
     networks:
       - dev-forge-net
     healthcheck:

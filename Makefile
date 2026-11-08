@@ -97,7 +97,7 @@ docker-logs: ## Tail logs from all infra containers
 docker-clean: ## Stop containers and remove volumes (WARNING: deletes data)
 	docker compose -f $(COMPOSE_FILE) down -v
 
-.PHONY: obs-up obs-down obs-clean obs-logs obs-smoke-stack
+.PHONY: obs-up obs-down obs-clean obs-logs obs-smoke-stack obs-smoke
 obs-up: ## Start the local observability stack (OBS_PERSIST=1 enables persistence)
 	$(OBS_COMPOSE) --profile observability up -d --wait otel-lgtm
 
@@ -116,6 +116,10 @@ obs-logs: ## Follow observability stack logs
 
 obs-smoke-stack: ## Send and verify synthetic traces, metrics and logs
 	python3 scripts/observability-smoke.py
+
+obs-smoke: ## Run API integration checks against Grafana, Tempo, Loki, Prometheus and PostgreSQL
+	$(OBS_COMPOSE) --profile observability up -d --wait otel-lgtm postgres
+	@set -a; if [ -f ./.env ]; then . ./.env || exit; fi; set +a; go test -tags=obsintegration -count=1 ./internal/shared/telemetry
 
 # ── Full setup ────────────────────────────────────────────────────────────────
 .PHONY: setup

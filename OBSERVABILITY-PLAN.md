@@ -166,7 +166,7 @@ Origen: OBSERVABILITY.md §13 (2026-11-01).
 | Transporte | Las tres señales por OTLP/HTTP a un único endpoint. Sin `/metrics`, sin ServiceMonitor, sin agente de logs, sin socket de Docker. |
 | Stack local | `grafana/otel-lgtm` con versión fijada (probada `0.39.0`), perfil `observability` de Compose. |
 | Librerías | `gofiber/contrib/v3/otel` v1.3.2, SDK `otel` v1.47.0, `autoexport` v0.72.0, `otelzap` v0.21.0, `otelpgx` v0.13.0, `contrib/instrumentation/runtime` v0.72.0. Verificar de nuevo contra el proxy de Go al iniciar cada fase por si hay versiones nuevas. |
-| Configuración | Variables estándar `OTEL_*` leídas por `autoexport`/SDK; solo se añade lo que OTEL no define (`OTEL_ENABLED`). |
+| Configuración | Variables estándar `OTEL_*` leídas por `autoexport`/SDK; solo se añade lo que OTEL no define (`OTEL_ENABLED`, `OTEL_SHUTDOWN_TIMEOUT`, `SHUTDOWN_TIMEOUT`). **`.env` (ignorado por Git, cargado por `make run`) es la fuente central de configuración; `.env.example` solo enumera las variables necesarias.** *(Decisión 2026-11-01.)* |
 | Fallos | Configuración inválida: error explícito al arrancar. Backend caído: operación normal con descarte acotado. Deshabilitado: no-op sin panic. |
 | Sampling | `parentbased_always_on` (100 %) en dev/qa. |
 | Logs | `zapcore.NewTee`: stdout (consola/JSON) + bridge `otelzap`. Solo la vía OTLP se ingiere en Loki. |
@@ -186,31 +186,43 @@ Revisión estática del 2026-11-01.
 | H7 | El logger no recibe contexto; hay dos logs por error (`handler error` y `request error`). | [logger.go](internal/shared/logger/logger.go), [middleware.go](internal/shared/server/middleware.go) | Hay que pasar `ctx` para correlacionar y unificar el log de error. |
 | H8 | DEV-FORGE-PLAN 4.2, 4.5 y 4.6 describen `/metrics` y recolección de stdout. | [DEV-FORGE-PLAN.md](DEV-FORGE-PLAN.md) | Contradicen la decisión vigente (sección 8). |
 
+**Estado tras F2–F3 (2026-11-01):** H1 ✅ (handlers y auth usan `c.Context()`, con tests de regresión), H3 ✅, H4 ✅, H5 ✅, H7 ✅ (un log de acceso por request y el detalle del error una sola vez), H8 ✅. **H2 resuelto con un matiz respecto a lo previsto:** el logger de acceso debe ir **antes** (fuera) del middleware OTEL, no después. Ese middleware ejecuta el error handler y devuelve `nil`, así que solo un middleware exterior ve el status final; además `X-Trace-Id` solo está completo cuando el middleware termina, por lo que un logger interior pierde el `trace_id` (comprobado con una mutación). **H6 sigue pendiente (F6).**
+
 ## 4. Contrato de configuración objetivo
 
 | Variable | Valor local de ejemplo | Quién la define |
 |---|---|---|
-| `OTEL_ENABLED` | `true` con el perfil activo; `false` por defecto | Propia (interruptor global) |
+| `OTEL_ENABLED` | `true` para exportar; `false` por defecto. Un valor mal escrito (p. ej. `ture`) es un error de arranque, no un «falso» silencioso | Propia (interruptor global) |
 | `OTEL_SERVICE_NAME` | `dev-forge` | Estándar |
-| `OTEL_RESOURCE_ATTRIBUTES` | `service.version=0.1.0,deployment.environment.name=development` | Estándar (sustituye a `OTEL_SERVICE_VERSION`; se mantiene como fallback durante la migración) |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | Estándar |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` | Estándar |
+| `OTEL_SERVICE_VERSION` | `0.1.0` | Propia: el estándar no define una variable de versión |
+| `ENVIRONMENT` | `development` → atributo `deployment.environment.name` | Propia |
+| `OTEL_RESOURCE_ATTRIBUTES` | opcional: atributos adicionales o sobrescritura | Estándar |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` (con esquema obligatorio) | Estándar |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` o `grpc` | Estándar |
 | `OTEL_EXPORTER_OTLP_HEADERS` | vacío (en homelab, si hay auth) | Estándar |
 | `OTEL_TRACES_SAMPLER` / `_ARG` | `parentbased_always_on` | Estándar |
-| `OTEL_{TRACES,METRICS,LOGS}_EXPORTER` | `otlp` (o `none` para apagar una señal) | Estándar |
-| `OTEL_METRIC_EXPORT_INTERVAL` | `10000` local, `30000`–`60000` homelab | Estándar |
+| `OTEL_{TRACES,METRICS,LOGS}_EXPORTER` | `otlp` (o `none`/`console`); `prometheus` y listas separadas por comas se rechazan | Estándar |
+| `OTEL_METRIC_EXPORT_INTERVAL` | `10000` local, `30000`–`60000` homelab (ms) | Estándar |
+| `OTEL_SHUTDOWN_TIMEOUT` | `5s`: presupuesto para el flush final | Propia |
+| `SHUTDOWN_TIMEOUT` | `15s`: espera a requests en curso. Sumado al anterior debe quedar por debajo del `terminationGracePeriodSeconds` de Kubernetes | Propia |
 
-Al implementar hay que **confirmar con tests** qué valores inválidos devuelve `autoexport` como error (el protocolo desconocido sí) y cuáles el SDK degrada en silencio (p. ej. un sampler desconocido o un argumento mal formado). Estos últimos se validan explícitamente en `telemetry.Setup` para cumplir «error explícito al arrancar».
+Precedencia del `Resource`, de menor a mayor: valores por defecto del SDK, configuración de la aplicación (`OTEL_SERVICE_NAME`, `OTEL_SERVICE_VERSION`, `ENVIRONMENT`) y, por último, `OTEL_RESOURCE_ATTRIBUTES`. *(Ajuste respecto al plan inicial, que proponía llevar `service.version` y el entorno dentro de `OTEL_RESOURCE_ATTRIBUTES`: duplicaba valores que la aplicación ya conoce.)*
+
+**Verificado en F2** contra las versiones instaladas (SDK 1.47.0, `autoexport` 0.72.0):
+- `autoexport` **sí** devuelve error para un exportador desconocido o un protocolo inválido.
+- El SDK **degrada en silencio** un sampler desconocido o con argumento inválido (lo reporta por el *error handler* y sigue con otro) y un intervalo o timeout de métricas mal formado (lo registra y usa el valor por defecto). Por eso `telemetry.Setup` los valida y construye el sampler él mismo.
+- El SDK **no reconoce `OTEL_SDK_DISABLED`** (sin referencias en el código del SDK): el único interruptor es `OTEL_ENABLED`.
+- Un endpoint sin esquema (`localhost:4317`) se rechaza en el arranque con un mensaje que sugiere el formato correcto.
 
 ## 5. Fases
 
 Orden de dependencias: F0 → F1 → F2 → F3 → F4 → F5 → F6 → F7. F1 puede hacerse en paralelo con F2.
 
-### Fase 0 — Preparación y línea base 🔵
+### Fase 0 — Preparación y línea base ✅
 
 | ID | Tarea | Verificación |
 |---|---|---|
-| OP-0.1 | Actualizar dependencias OTEL existentes. `otelpgx` v0.13.0 y API/SDK v1.47.0 instalados; los módulos aún no utilizados (`autoexport`, `otelzap`, runtime y middleware Fiber) se incorporarán en F2–F4, cuando tengan imports, porque `go mod tidy` elimina dependencias sin uso. | Build y pruebas con selección equivalente a `make test` pasan; cobertura 76,7 % antes y después. ⬜ Pendiente incorporar los módulos futuros. |
+| OP-0.1 | Actualizar dependencias OTEL. `otelpgx` v0.13.0 y API/SDK v1.47.0 en F0; `autoexport`, runtime, middleware Fiber v3 y SDK de logs se incorporaron en F2–F3 al tener imports (`go mod tidy` elimina lo no usado). | Build y pruebas pasan. ✅ Solo falta `otelzap`, que entra en F4 con su primer import. |
 | OP-0.2 | Confirmar memoria disponible para Docker Desktop. | ✅ Docker dispone de ~3,83 GiB; el laboratorio llegó a ~1,34 GiB durante las pruebas. No es una garantía de capacidad para otras cargas. |
 | OP-0.3 | Actualizar `.env.example` al contrato de la sección 4 y eliminar el endpoint sin esquema (H5). | ✅ Ejemplo actualizado; las variables nuevas no están conectadas a exporters todavía. |
 | OP-0.4 | Fijar convención de nombres: paquete `internal/shared/telemetry` (ya reservado en DEV-FORGE-PLAN). | ✅ Reservado; la implementación corresponde a F2. |
@@ -228,64 +240,71 @@ Orden de dependencias: F0 → F1 → F2 → F3 → F4 → F5 → F6 → F7. F1 p
 
 **Gate F1:** verificado en un clon local aislado con los archivos de esta implementación copiados al clon, sin `.env` ni credenciales del autor: `make obs-up` seguido de `make obs-smoke-stack` encontró las tres señales. El clon aún necesita esos cambios porque no están confirmados en Git.
 
-### Fase 2 — Paquete `telemetry` ⬜
+### Fase 2 — Paquete `telemetry` ✅
 
 Ubicación: `internal/shared/telemetry/`.
 
 | ID | Tarea | Verificación |
 |---|---|---|
-| OP-2.1 | `Setup(ctx, cfg) (shutdown func(context.Context) error, err error)`. Crea `Resource` (`resource.WithFromEnv`, nombre, versión, entorno), propagadores W3C TraceContext + Baggage, y registra TracerProvider, MeterProvider y LoggerProvider globales. | Test unitario con exporters en memoria |
-| OP-2.2 | Exporters con `autoexport` (`NewSpanExporter`, `NewMetricReader`, `NewLogExporter`) para respetar `OTEL_*`. Batching con límites del SDK. | Tests con `OTEL_*_EXPORTER=none` y `otlp` |
-| OP-2.3 | Validación estricta de configuración (sampler, protocolo, intervalo, endpoint) con errores claros que incluyan la variable ofensiva. | Tabla de casos inválidos → error; válidos → ok |
-| OP-2.4 | Modo deshabilitado (`OTEL_ENABLED=false`): providers no-op, `shutdown` no-op, sin panic. No asumir que `OTEL_SDK_DISABLED` funciona sin probarlo. | Test |
-| OP-2.5 | `otel.SetErrorHandler` que registre los fallos de exportación **una vez por intervalo**, sin inundar logs ni bloquear. | Test con exporter que falla |
-| OP-2.6 | Métricas de runtime Go (`instrumentation/runtime`). Métricas del pool pgx solo si aportan valor verificado. | Aparecen en el backend (F5) |
-| OP-2.7 | Reestructurar [main.go](cmd/server/main.go) (H4): `Setup` antes de `database.New`; salida controlada sin `log.Fatal` que omita defers; apagado ordenado: dejar de aceptar requests → esperar en curso → shutdown de telemetría con timeout → cerrar DB → sincronizar logger. Timeout ajustable al grace period de Kubernetes. | Test de shutdown dentro del plazo (también con Collector caído, en F6) |
-| OP-2.8 | Retirar `OTELConfig.OTLPEndpoint` y dejar en `config` solo lo propio (`Enabled`). | `config_test.go` actualizado |
+| OP-2.1 | `Setup(ctx, cfg, log) (ShutdownFunc, error)`. Crea el `Resource`, registra propagadores W3C TraceContext + Baggage y los providers globales de trazas, métricas y logs. El `log` recibido **no debe exportar por OTLP** (evita el bucle exportar → fallar → loguear → exportar). | ✅ Tests con servidor OTLP falso: llegan `/v1/traces`, `/v1/metrics` y `/v1/logs` con el recurso esperado; precedencia del `Resource` |
+| OP-2.2 | Exporters con `autoexport` para respetar `OTEL_*`; batching con los límites por defecto del SDK. | ✅ El endpoint y `OTEL_METRICS_EXPORTER=none` tienen efecto real (mutación: ignorar el endpoint rompe 3 tests) |
+| OP-2.3 | Validación estricta con la variable ofensiva en el mensaje; reporta todos los problemas a la vez. Exportadores limitados a `otlp`, `console` y `none`. | ✅ 15 casos inválidos → error; un `Setup` fallido no instala providers globales |
+| OP-2.4 | Modo deshabilitado: no-op y sin tocar los providers globales. `OTEL_SDK_DISABLED` no existe en este SDK (ver sección 4). | ✅ Test |
+| OP-2.5 | `otel.SetErrorHandler` con límite de una línea por minuto y contador de suprimidos. | ✅ Test con reloj falso + comprobado en vivo con el backend caído: 1 aviso/min (25 y 19 suprimidos), memoria estable (~21 MB). **El primer aviso tarda ~1 min** porque el exportador reintenta con *backoff* antes de rendirse |
+| OP-2.6 | Métricas de runtime Go. Las métricas del pool pgx (`otelpgx.RecordStats`) **no** se conectan todavía: se decide en F5 con evidencia de que aportan sobre `db.client.operation.duration`, que ya existe. | ✅ Runtime: `go_goroutine_count`, `go_memory_used_bytes`, etc. visibles en Prometheus |
+| OP-2.7 | [main.go](cmd/server/main.go) reestructurado (H4): `run()` devuelve el código de salida (sin `log.Fatal`), `signal.NotifyContext`, `Setup` antes de `database.New`, error del servidor HTTP ya no se ignora. Orden de apagado: HTTP (hasta `SHUTDOWN_TIMEOUT`) → cierre de DB → flush de telemetría (hasta `OTEL_SHUTDOWN_TIMEOUT`) → sync del logger. *(La telemetría se vacía **la última**, para capturar todo lo anterior; el plan inicial la ponía antes de cerrar la DB.)* | ✅ Con la API real: salida con código 0 en 0,04 s con el stack arriba; en 0,1 s con el backend caído, avisando «telemetry shutdown incomplete» en vez de colgarse |
+| OP-2.8 | Retirado `OTELConfig.OTLPEndpoint`; `OTEL_ENABLED` estricto; añadidos `SHUTDOWN_TIMEOUT` y `OTEL_SHUTDOWN_TIMEOUT` (deben ser positivos). | ✅ `config_test.go` |
 
-**Gate F2:** con `OTEL_ENABLED=true` y el stack arriba, la app arranca y exporta; con configuración inválida falla al arrancar; deshabilitada, no hay panic.
+**Gate F2:** verificado con el binario real contra el stack local (`otel-lgtm`) el 2026-11-01:
+- con `OTEL_ENABLED=true` arranca, exporta y los datos llegan a Tempo y Prometheus; el flush de apagado entrega spans y métricas aunque el intervalo sea de 60 s;
+- `OTEL_TRACES_SAMPLER=sometimes` y `OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317` hacen fallar el arranque con exit 1 y ambos problemas en el mensaje;
+- deshabilitada, no hay panic ni cambios en los providers.
 
-### Fase 3 — Instrumentación HTTP, contexto y PostgreSQL ⬜
+*Alcance:* la ejecución con la API real fue manual y puntual. Su automatización (test de integración etiquetado) es F5. Los logs de la aplicación todavía **no** se exportan por OTLP (F4).
 
-| ID | Tarea | Verificación |
-|---|---|---|
-| OP-3.1 | Registrar `fiberotel.New(...)` en [server.go](internal/shared/server/server.go) con este orden: `requestid` → `recover` → **otel** → `cors` → logger de acceso. `WithNext` excluye `/health` y `/ready`. | Test: probes sin spans ni métricas |
-| OP-3.2 | Decidir y fijar `WithPublicEndpoint` (la API recibe tráfico de clientes no controlados: iniciar traza nueva enlazada es lo prudente) y `WithTraceResponseHeader("X-Trace-Id")`. Dejar `WithClientIP` según revisión de privacidad. | Tests de propagación entrante |
-| OP-3.3 | Sustituir `c.RequestCtx()` por `c.Context()` en handlers y en el middleware de auth (H1). | Test: span de repositorio es hijo del span HTTP |
-| OP-3.4 | Instalar `otelpgx` siempre que la telemetría esté habilitada, tras `Setup` (H3). Sin `db.statement` con valores. | Spans pgx con parentesco correcto |
-| OP-3.5 | Corregir el logger de acceso (H2): leer el status final tras el middleware OTEL, no basarse en `err`, y no registrar dos veces el mismo error (H7). | Tests 2xx/4xx/5xx/panic |
-| OP-3.6 | Spans de negocio solo donde ayuden (por ejemplo `template.Create`); no uno por función. | Revisión |
-| OP-3.7 | Tests HTTP con `app.Test` y exporters en memoria (`tracetest`, `ManualReader`): nombre `GET /api/...:id`, `http.route` con plantilla, 404 sin `http.route`, 4xx sin status de error en el span, 5xx con error, panic recuperado, `traceparent` entrante. | `make test` |
-
-**Gate F3:** una request HTTP→caso de uso→DB comparte `trace_id` y la jerarquía correcta en tests; las métricas HTTP tienen solo labels de baja cardinalidad.
-
-### Fase 4 — Logs y correlación ⬜
+### Fase 3 — Instrumentación HTTP, contexto y PostgreSQL ✅
 
 | ID | Tarea | Verificación |
 |---|---|---|
-| OP-4.1 | En [logger.go](internal/shared/logger/logger.go): `zapcore.NewTee` con el core actual (stdout) y `otelzap.NewCore` con el `LoggerProvider` global. Stdout en JSON cuando `DEBUG=false`, consola en debug. | Test con `logtest`/exporter en memoria |
-| OP-4.2 | Helper para loggear con contexto (`zap.Any("context", ctx)` es el campo que `otelzap` usa como contexto) y usarlo en handlers, middleware y errores. **Cierra el pendiente «confirmar que otelzap propaga el contexto del span»** para logs de handlers; los logs de dependencias sin contexto se documentan como sin correlación. | Log con `trace_id`/`span_id` válidos; log sin span no los lleva |
-| OP-4.3 | Añadir `trace_id`/`span_id` al stdout para que la consola también se pueda correlacionar. | Test sobre salida JSON |
-| OP-4.4 | Revisar qué se loggea: sin `Authorization`, cookies, bodies, tokens ni PII; revisar `ip` y `path` (los paths con IDs son campos, no labels). Redacción en el Collector solo como defensa adicional. | Test con request que lleva un token en el path o query: no aparece |
-| OP-4.5 | Comprobar en Loki cómo llegan `trace_id`/`span_id` (metadato estructurado, no label indexada) y que la regla derivada del datasource de `otel-lgtm` (`matcherType: label`, regex `trace_id`) abre la traza. Si no encaja, ajustar el provisioning propio. | Verificación manual en Grafana + F5 |
-| OP-4.6 | Comprobar que cada log llega **una sola vez** a Loki (stdout no se ingiere). | Consulta por `trace_id`: 1 resultado |
+| OP-3.1 | Middleware `fiberotel` en [server.go](internal/shared/server/server.go). Orden final: `requestid` → `recover` → **logger de acceso** → **otel** → `cors` (ver H2). Solo se registra si `OTEL_ENABLED`. `WithNext` excluye `/health` y `/ready`. | ✅ Test: probes sin spans ni series; en vivo, 0 series para `/health` y `/ready` |
+| OP-3.2 | `WithPublicEndpoint` (una traza entrante solo se **enlaza**, no se continúa: un cliente no controlado no puede unirse a nuestras trazas ni forzar el muestreo); `X-Trace-Id` en la respuesta, **sin** `traceparent` ni `baggage`; `WithClientIP(false)` (la IP no se guarda en spans; sigue en el log de acceso); `X-Request-Id` y `X-Trace-Id` expuestos en CORS para que un navegador los lea. | ✅ Tests de cada decisión. Reversibles si se prefiere otra política |
+| OP-3.3 | `c.RequestCtx()` → `c.Context()` en los 5 handlers de templates y en el middleware de auth (H1). | ✅ Tests de regresión por handler y para auth; **mutación**: volver a `RequestCtx()` los hace fallar |
+| OP-3.4 | `otelpgx` con `newTracer()` tras `Setup`. Sin argumentos de consulta; `db.query.text` lleva `$N`. Spans con prefijo (`query SELECT`, `prepare SELECT`): sin él, el *prepare* de pgx —que ocurre dentro de la consulta la primera vez— parecía una consulta duplicada (visto en la traza real). Solo se crean bajo un span padre que graba. | ✅ Tests del tracer + traza real en Tempo (HTTP → `Introspect` de Zitadel → `pool.acquire` → `prepare`/`query SELECT`) |
+| OP-3.5 | Logger de acceso: status final y `trace_id`; panics registrados como 500; nivel por status (5xx error, 4xx warn). El detalle del error lo escribe **solo** el error handler (error en 5xx, debug en 4xx). | ✅ Tests 2xx/4xx/5xx/panic, con y sin telemetría |
+| OP-3.6 | Spans de negocio. **Evaluado, no añadido:** HTTP + pgx ya dan la jerarquía HTTP → caso de uso → DB; un span por caso de uso no aporta todavía. Reevaluar cuando existan flujos de build/deploy (DEV-FORGE-PLAN 4.4). | — |
+| OP-3.7 | Tests HTTP en proceso con exportadores en memoria: nombre y `http.route` con plantilla, 404 sin ruta, 4xx sin estado de error, 5xx con error, panic con evento `exception`, `traceparent` entrante enlazado, probes, cardinalidad (30 IDs + 30 rutas inexistentes → 2 series), IP no registrada. | ✅ `go test -race` |
 
-**Gate F4:** desde un log en Grafana se abre su traza, y viceversa.
+**Gate F3:** ✅ en tests (jerarquía HTTP → repositorio con mismo `trace_id`; 2 series para 60 requests con IDs/rutas distintos) y con la API real: una request autenticada produjo la traza completa y las métricas `http_server_request_duration_seconds_*` con `http_route` normalizada; cinco rutas inexistentes distintas colapsaron en **una** serie sin `http_route`.
 
-### Fase 5 — Verificación integrada con la app real ⬜
+**Adelanto de F5 (OP-5.3), nombres reales observados en Prometheus:** `http_server_request_duration_seconds_{bucket,count,sum}`, `http_server_request_body_size_bytes_*`, `http_server_response_body_size_bytes_*`, `http_server_active_requests`, `db_client_operation_duration_seconds_*`, `go_goroutine_count`, `go_memory_used_bytes`, `go_memory_allocated_bytes_total`. Etiquetas de recurso promovidas: `service_name`, `service_version`, `deployment_environment_name`, `job`. En una consulta autenticada, ~200 ms de la latencia son la introspección en Zitadel Cloud (span `Introspect`).
+
+### Fase 4 — Logs y correlación ✅
+
+| ID | Tarea | Verificación |
+|---|---|---|
+| OP-4.1 | En [logger.go](internal/shared/logger/logger.go): `zapcore.NewTee` con el core actual (stdout) y `otelzap.NewCore` con el `LoggerProvider` global. Stdout en JSON cuando `DEBUG=false`, consola en debug. El bridge se añade después de `telemetry.Setup`; los diagnósticos del exporter siguen solo en stdout para evitar recursión. | ✅ Test con provider en memoria; `make obs-smoke-stack` confirma la ingesta OTLP |
+| OP-4.2 | Helper para loggear con contexto (`zap.Any("context", ctx)` es el campo que `otelzap` usa como contexto) en handlers, middleware, casos de uso y errores. **Cierra el pendiente «confirmar que otelzap propaga el contexto del span»**; los logs sin contexto de request no llevan correlación. | ✅ Test con `trace_id`/`span_id` válidos y caso sin span; consulta Loki de API real |
+| OP-4.3 | Añadir `trace_id`/`span_id` al stdout para que la consola también se pueda correlacionar. | ✅ Tests sobre JSON; contexto interno no se imprime |
+| OP-4.4 | Revisar qué se loggea: sin `Authorization`, cookies, bodies, tokens ni PII. Se registra la plantilla de ruta, no segmentos o query; se quitan IP, email y URL de repositorio de logs. | ✅ Request con sentinels en header, path y query: ninguno apareció en Loki |
+| OP-4.5 | Comprobar en Loki cómo llegan `trace_id`/`span_id` (metadato estructurado, no label indexada) y que las reglas derivadas de `otel-lgtm` enlazan Loki y Tempo. | ✅ La consulta por `trace_id` devuelve logs y Tempo resuelve la traza. Loki devuelve estos metadatos en resultados LogQL, pero el endpoint `/series` confirma que no son labels indexadas; la provisión incluye enlaces en ambas direcciones |
+| OP-4.6 | Comprobar que cada log llega **una sola vez** a Loki (stdout no se ingiere). | ✅ Para una request, Loki devolvió una vez cada uno de sus tres eventos; el log de acceso apareció una vez |
+
+**Gate F4:** ✅ Validado con la API real a través del proxy de Grafana: el `trace_id` de la respuesta devolvió tres eventos correlacionados en Loki y Tempo resolvió la traza. Las reglas provisionadas conectan Loki↔Tempo; la consulta de series confirmó que `trace_id`/`span_id` son metadatos estructurados, no labels indexadas. El acceso apareció una sola vez y no incluyó los valores de prueba de Authorization/path/query.
+
+### Fase 5 — Verificación integrada con la app real ✅
 
 Cierra el pendiente «verificar el stack local con la app real» y los criterios 1–6 y 9 de OBSERVABILITY.md §12.
 
 | ID | Tarea | Verificación |
 |---|---|---|
-| OP-5.1 | Test de integración etiquetado (`//go:build obsintegration`) que levanta la app en proceso con telemetría real hacia `localhost:4318`, ejecuta requests (2xx, 4xx, 5xx, panic, un flujo con DB, muchas rutas 404 y muchos IDs) y consulta Tempo, Loki y Prometheus por el proxy de Grafana con reintentos y timeout. Target `make obs-smoke`. | Todas las aserciones pasan |
-| OP-5.2 | Aserciones: métricas `http_server_request_duration_seconds_*` con `http_route` y status esperados; traza HTTP + span pgx; log encontrado una vez con su `trace_id`; **sin series nuevas** por ID o 404 distinto. | Test |
-| OP-5.3 | Registrar los **nombres reales** tras la traducción OTEL → Prometheus y las labels promovidas desde atributos de recurso (`service_name`, `deployment_environment_name`) en Loki y Prometheus. | Documento con la tabla |
-| OP-5.4 | Dashboard mínimo RED (tasa, errores, latencia p50/p95/p99 por ruta) provisionado por archivo, más la ruta de montaje en `otel-lgtm` (ver su sección «Customize backend configuration»). | Se carga sin pasos manuales |
-| OP-5.5 | Medir volumen: series activas, bytes de logs y trazas por request y por hora con tráfico de ejemplo; extrapolar a dev+qa del homelab. Sirve para **validar o corregir el dimensionado inicial** (§13 decisión 5). | Tabla de mediciones |
-| OP-5.6 | Caso de traza no muestreada: con `OTEL_TRACES_SAMPLER=parentbased_traceidratio` y ratio 0 → el log lleva IDs inválidos o ausentes y no rompe nada. | Test |
+| OP-5.1 | Test de integración etiquetado (`//go:build obsintegration`) que levanta la app en proceso con telemetría real hacia `localhost:4318`, ejecuta requests (2xx, 4xx, 5xx, panic, un flujo con DB, muchas rutas 404 y muchos IDs) y consulta Tempo, Loki y Prometheus por el proxy de Grafana con reintentos y timeout. Target `make obs-smoke`. | ✅ `make obs-up && make obs-smoke` |
+| OP-5.2 | Aserciones: métricas `http_server_request_duration_seconds_*` con `http_route` y status esperados; traza HTTP + span pgx; log encontrado una vez con su `trace_id`; **sin series nuevas** por ID o 404 distinto. | ✅ Test |
+| OP-5.3 | Registrar los **nombres reales** tras la traducción OTEL → Prometheus y las labels promovidas desde atributos de recurso (`service_name`, `deployment_environment_name`) en Loki y Prometheus. | ✅ Tabla en [docs/observability-local.md](docs/observability-local.md) |
+| OP-5.4 | Dashboard HTTP provisionado por archivo: total y conteo 2xx/3xx/4xx/5xx para `dev-forge`, conteos agrupados por código HTTP en el rango seleccionado y tasa de solicitudes/min por código a lo largo del tiempo. | ✅ Dashboard HTTP consultado por API |
+| OP-5.5 | Medir volumen: series activas, bytes de logs y trazas por request y por hora con tráfico de ejemplo; extrapolar a dev+qa del homelab. Sirve para **validar o corregir el dimensionado inicial** (§13 decisión 5). | ✅ Tabla medida y extrapolación en [docs/observability-local.md](docs/observability-local.md) |
+| OP-5.6 | Caso de traza no muestreada: con `OTEL_TRACES_SAMPLER=parentbased_traceidratio` y ratio 0 → el log lleva IDs inválidos o ausentes y no rompe nada. | ✅ Test |
 
-**Gate F5:** `make obs-up && make obs-smoke` pasa desde un clon limpio; Grafana abre con datasources y dashboard provisionados.
+**Gate F5:** ✅ `make obs-up && make obs-smoke` pasa; Grafana expone los datasources y el dashboard RED provisionados. Las estimaciones de bytes son tamaños de respuestas JSON de consulta, no almacenamiento físico.
 
 ### Fase 6 — Robustez, privacidad y readiness ⬜
 
@@ -345,8 +364,8 @@ Capas de prueba:
 
 | Pendiente | Fase / tarea | Estado |
 |---|---|---|
-| Verificar el stack local con la app real | F5 (OP-5.1 a OP-5.4) | ⬜ |
-| Confirmar que `otelzap` propaga el contexto del span a los logs | F4 (OP-4.2) | ⬜ |
+| Verificar el stack local con la app real | Manual y puntual: hecho en F2–F4 (trazas, métricas, logs y apagado). **Automatizado: F5 (OP-5.1 a OP-5.4)** | 🔵 |
+| Confirmar que `otelzap` propaga el contexto del span a los logs | F4 (OP-4.2) | ✅ |
 | Inventariar el homelab | F7 (OP-7.3) | ⛔ homelab no operativo |
 | Decidir Helm o `otel-lgtm` provisional en el homelab | F7 (OP-7.4) | ⛔ depende de OP-7.3 |
 | Validar el dimensionado inicial (retención, PVC, series) | F5 (OP-5.5), F7 (OP-7.4) | ⬜ |
@@ -368,9 +387,10 @@ Aplicados en DEV-FORGE-PLAN.md el 2026-11-01 (tareas 4.1, 4.2, 4.3, 4.4, 4.5 y 4
 | Riesgo | Mitigación |
 |---|---|
 | La señal de logs de OTEL Go está en *release candidate* y `otelzap` (v0.21) y `otlploghttp` (v0.23) son 0.x. | Versiones fijadas; test de contrato en F4; plan B: stdout + Alloy. |
-| Los spans no cuelgan del span HTTP por usar `c.RequestCtx()` (H1). | OP-3.3 y su test de parentesco. |
-| Errores de configuración que el SDK degrada en silencio. | OP-2.3 y OP-6.6. |
-| Los nombres de métricas y labels cambian por la traducción OTEL → Prometheus. | OP-5.3; los dashboards se prueban contra el backend real. |
+| Los spans no cuelgan del span HTTP por usar `c.RequestCtx()` (H1). | OP-3.3 y su test de parentesco (✅ con mutación). Una regresión futura en un handler nuevo solo la detecta un test equivalente: ver el de templates como plantilla. |
+| Errores de configuración que el SDK degrada en silencio. | OP-2.3 (✅) y OP-6.6. |
+| Los nombres de métricas y labels cambian por la traducción OTEL → Prometheus. | OP-5.3 (nombres ya observados, ver F3); los dashboards se prueban contra el backend real. |
+| Un backend caído tarda ~1 min en producir el primer aviso (reintentos del exportador). | Esperado; el límite de una línea por minuto evita el ruido. No usar el log como detección rápida: usar alertas sobre el pipeline (4.9). |
 | `otel-lgtm` no es el stack del homelab. | F7 lo separa explícitamente; el contrato de la app es independiente del backend. |
 | Docker Desktop con poca memoria. | OP-0.2. |
 | Nuevas versiones durante la implementación. | Revalidar versiones al iniciar cada fase. |
@@ -388,3 +408,6 @@ Aplicados en DEV-FORGE-PLAN.md el 2026-11-01 (tareas 4.1, 4.2, 4.3, 4.4, 4.5 y 4
 | Fecha | Cambio |
 |---|---|
 | 2026-11-01 | Creación del plan a partir de OBSERVABILITY.md y de la revisión del código. |
+| 2026-11-01 | F0 y F1 implementadas y verificadas (laboratorio local, prueba de humo sintética). |
+| 2026-11-01 | F2 y F3 implementadas: paquete `telemetry`, instrumentación HTTP/PostgreSQL, apagado ordenado. Verificadas con tests y con la API real contra `otel-lgtm`. Decisiones nuevas: `.env` como fuente central, logger de acceso fuera del middleware OTEL (H2), telemetría vaciada la última, `WithPublicEndpoint`. Pendiente: F4 (logs OTLP y correlación) en adelante. |
+| 2026-11-08 | F4 implementada y verificada con tests y la API real: logs OTLP y stdout correlacionados, valores sensibles excluidos y enlaces Loki↔Tempo comprobados. Se confirmó con `/series` que los IDs de traza/span no son labels indexadas. |

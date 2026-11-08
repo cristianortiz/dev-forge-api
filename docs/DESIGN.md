@@ -705,7 +705,7 @@ La lectura de la tabla es:
 | Repos, branches y webhooks de GitHub           | **Pendiente**: no está cableado                    | Integración prevista para la Fase 1                                                |
 | Build de imágenes                              | **Pendiente**: no hay runner conectado             | Añadir runner aislado; el proceso API no debe ejecutar Docker SDK                  |
 | Scopes y despliegue en Kubernetes              | **Pendiente**: solo está definido el diseño        | Implementar con `client-go` y objetos tipados                                      |
-| Trazas, métricas y logs centralizados          | **Pendiente**: stack no conectado                  | Instrumentar las tres señales por OTLP (Tempo, Prometheus, Loki) en la Fase 4; ver `OBSERVABILITY-PLAN.md` |
+| Trazas, métricas y logs centralizados          | **Parcial**: la API exporta trazas y métricas por OTLP al laboratorio local; logs de la app y homelab pendientes | Completar logs por OTLP, dashboards y despliegue en el homelab en la Fase 4; ver `OBSERVABILITY-PLAN.md` |
 | Logs de pods, approvals, audit y notifications | **Pendiente**: módulos no cableados                | Implementar únicamente dentro del alcance de cada fase                             |
 | OpenAPI 3.2 + Scalar                           | **Disponible** para los endpoints existentes       | Contrato canónico en YAML; lint y pruebas con `make openapi-check`                 |
 | Servicios y secretos                           | **Pendiente**: no hay provisioning implementado    | Definir primero la conexión segura a PostgreSQL; no asumir provisioning vía Docker |
