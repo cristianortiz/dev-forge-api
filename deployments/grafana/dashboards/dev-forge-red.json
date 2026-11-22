@@ -2,7 +2,7 @@
   "annotations": {
     "list": []
   },
-  "description": "HTTP request counts by status code for the Dev Forge service.",
+  "description": "HTTP traffic, endpoint latency, recent logs, and trace correlations for the Dev Forge service.",
   "editable": false,
   "graphTooltip": 1,
   "id": null,
@@ -464,6 +464,411 @@
       ],
       "title": "Solicitudes/min por código HTTP",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Solicitudes por ruta reconocida durante el período seleccionado, ordenadas de mayor a menor.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "http_route"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Endpoint"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Solicitudes"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Solicitudes"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "round(sum by (http_route) (increase(http_server_request_duration_seconds_count{service_name=\"dev-forge\",http_route!=\"\"}[$__range]))) > 0",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Solicitudes por endpoint",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Percentil 95 de latencia HTTP por ruta reconocida durante el período seleccionado.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "http_route"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Endpoint"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Latencia p95"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "id": 9,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Latencia p95"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, http_route) (increase(http_server_request_duration_seconds_bucket{service_name=\"dev-forge\",http_route!=\"\"}[$__range]))) > 0",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Latencia p95 por endpoint",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Logs recientes de Dev Forge. Abre el detalle de una entrada y usa el enlace Trace para abrir la traza correspondiente en Tempo.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 10,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{service_name=\"dev-forge\"} | severity_text=\"info\" | method!=\"\" | line_format \"{{.method}} {{.route}} status={{.status}}\" |= ${logSearch:doublequote} | drop code_file_path, code_function_name, code_line_number, code_stacktrace, observed_timestamp, scope_name, telemetry_sdk_language, telemetry_sdk_name, telemetry_sdk_version, flags",
+          "maxLines": 50,
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Logs recientes · Dev Forge",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Request count for 4xx and 5xx responses, grouped by HTTP status and normalized endpoint. Use the log panel below for individual request IDs and trace links.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Requests"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "http_response_status_code"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "HTTP"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "http_route"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Endpoint"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "id": 12,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Requests"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "round(sum by (http_response_status_code, http_route) (label_replace(increase(http_server_request_duration_seconds_count{service_name=\"dev-forge\",http_response_status_code=~\"4..|5..\"}[$__range]), \"http_route\", \"unmatched\", \"http_route\", \"^$\"))) > 0",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Errores HTTP por status y endpoint",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "One enriched access log per failed HTTP request, including status, route, error_code, response message, and an underlying cause when available. 4xx stay WARN and 5xx stay ERROR.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 13,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{service_name=\"dev-forge\"} | status=~\"${httpStatus:raw}\" | method!=\"\" | line_format \"{{if .route}}{{.method}} {{.route}}{{else}}{{.method}} unmatched route{{end}} status={{.status}}{{if .error_code}} code={{.error_code}}{{end}}{{if .error_message}} {{.error_message}}{{end}}{{if and .exception_message (ne .exception_message .error_message)}} ({{.exception_message}}){{end}}\" |= ${logSearch:doublequote} | drop code_file_path, code_function_name, code_line_number, code_stacktrace, observed_timestamp, scope_name, telemetry_sdk_language, telemetry_sdk_name, telemetry_sdk_version, flags",
+          "maxLines": 100,
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Requests fallidas · 4xx/5xx",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "description": "Eventos de diagnóstico de aplicación que no corresponden a una request HTTP. Los detalles de errores HTTP están consolidados en el panel anterior.",
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 55
+      },
+      "id": 11,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{service_name=\"dev-forge\"} | severity_text=~\"${severity:raw}\" | method=\"\" | line_format \"{{.severity_text}} {{.error_code}} {{.exception_message}}\" |= ${logSearch:doublequote} | drop code_file_path, code_function_name, code_line_number, code_stacktrace, observed_timestamp, scope_name, telemetry_sdk_language, telemetry_sdk_name, telemetry_sdk_version, flags",
+          "maxLines": 200,
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Diagnósticos de plataforma · DEBUG/WARN/ERROR",
+      "type": "logs"
     }
   ],
   "refresh": "30s",
@@ -471,15 +876,69 @@
   "tags": [
     "dev-forge",
     "http",
-    "requests"
+    "requests",
+    "logs",
+    "traces"
   ],
+  "templating": {
+    "list": [
+      {
+        "allValue": "4..|5..",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "HTTP status",
+        "multi": false,
+        "name": "httpStatus",
+        "options": [],
+        "query": "4xx : 4.., 5xx : 5..",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "allValue": "debug|warn|error",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Severity",
+        "multi": false,
+        "name": "severity",
+        "options": [],
+        "query": "DEBUG : debug, WARN : warn, ERROR : error",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Buscar en logs",
+        "name": "logSearch",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
   "time": {
     "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Dev Forge · Solicitudes HTTP",
+  "title": "Dev Forge · Observabilidad",
   "uid": "dev-forge-red",
-  "version": 9
+  "version": 15
 }

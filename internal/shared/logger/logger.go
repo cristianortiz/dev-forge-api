@@ -32,6 +32,8 @@ func New(cfg *config.Config) (*zap.Logger, error) {
 	}
 
 	zapCfg.Level = zap.NewAtomicLevelAt(level)
+	// Keep error entries concise; the caller and trace IDs still aid navigation.
+	zapCfg.DisableStacktrace = true
 
 	logger, err := zapCfg.Build(
 		zap.WrapCore(func(core zapcore.Core) zapcore.Core {

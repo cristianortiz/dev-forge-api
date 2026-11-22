@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -299,28 +300,116 @@ func TestOTEL_PanicIsRecordedOnSpan(t *testing.T) {
 	}
 }
 
-func TestOTEL_ErrorDetailIsLoggedOnce(t *testing.T) {
+func TestDebugPanicDoesNotPrintStackTrace(t *testing.T) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalStderr := os.Stderr
+	os.Stderr = write
+	t.Cleanup(func() {
+		os.Stderr = originalStderr
+		_ = write.Close()
+		_ = read.Close()
+	})
+
+	core, _ := observer.New(zapcore.DebugLevel)
+	srv := New(&config.Config{Debug: true}, zap.New(core))
+	srv.App.Get("/panic", func(fiber.Ctx) error {
+		panic("kaboom")
+	})
+	resp, err := srv.App.Test(httptest.NewRequest(http.MethodGet, "/panic", nil))
+	if err != nil {
+		t.Fatalf("GET /panic: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("panic response status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	if err := write.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = originalStderr
+	output, err := io.ReadAll(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(output), "goroutine ") || strings.Contains(string(output), "recovered panic:") {
+		t.Errorf("recovery middleware printed a stack trace: %s", output)
+	}
+}
+
+func TestOTEL_ErrorDetailsAreConsolidatedWithAccessLog(t *testing.T) {
 	tests := []struct {
-		path      string
-		wantLevel zapcore.Level
+		path        string
+		wantStatus  int64
+		wantLevel   zapcore.Level
+		wantMessage string
 	}{
-		{"/fail", zapcore.ErrorLevel},
-		{"/panic", zapcore.ErrorLevel},
-		{"/missing", zapcore.DebugLevel}, // client errors are summarised by the access log
+		{"/fail", http.StatusInternalServerError, zapcore.ErrorLevel, "internal server error"},
+		{"/panic", http.StatusInternalServerError, zapcore.ErrorLevel, ""},
+		{"/missing", http.StatusNotFound, zapcore.WarnLevel, "no such thing"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
 			h := newHarness(t, true)
 			h.get(t, tt.path)
 
-			details := h.logs.FilterMessage("handler error").All()
-			if len(details) != 1 {
-				t.Fatalf("expected the error detail once, got %d entries", len(details))
+			entries := h.logs.FilterMessage("request").All()
+			if len(entries) != 1 {
+				t.Fatalf("request logs = %d, want one enriched entry", len(entries))
 			}
-			if details[0].Level != tt.wantLevel {
-				t.Errorf("detail level = %s, want %s", details[0].Level, tt.wantLevel)
+			if entries[0].Level != tt.wantLevel {
+				t.Errorf("request level = %s, want %s", entries[0].Level, tt.wantLevel)
+			}
+			fields := entries[0].ContextMap()
+			if fields["status"] != tt.wantStatus {
+				t.Errorf("request status = %v, want %d", fields["status"], tt.wantStatus)
+			}
+			if tt.wantMessage != "" && fields["error_message"] != tt.wantMessage {
+				t.Errorf("error_message = %v, want %q", fields["error_message"], tt.wantMessage)
+			}
+			if details := h.logs.FilterMessage("handler error").All(); len(details) != 0 {
+				t.Errorf("error detail emitted as a duplicate log: %d entries", len(details))
 			}
 		})
+	}
+}
+
+func TestErrorDetailsAreLoggedWithoutChangingResponse(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	srv := New(&config.Config{}, zap.New(core))
+	srv.App.Get("/failed-template", func(c fiber.Ctx) error {
+		SetErrorDetails(c, "template_read_failed", errors.New("repository constraint failure"))
+		return fiber.NewError(fiber.StatusInternalServerError, "failed to get template")
+	})
+
+	resp, err := srv.App.Test(httptest.NewRequest(http.MethodGet, "/failed-template", nil))
+	if err != nil {
+		t.Fatalf("GET /failed-template: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	entries := logs.FilterMessage("request").All()
+	if len(entries) != 1 {
+		t.Fatalf("request logs = %d, want one enriched entry", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if got := fields["error_code"]; got != "template_read_failed" {
+		t.Errorf("error_code = %v, want template_read_failed", got)
+	}
+	if got := fields["error_message"]; got != "failed to get template" {
+		t.Errorf("error_message = %v, want failed to get template", got)
+	}
+	if got := fields["error"]; got != "repository constraint failure" {
+		t.Errorf("cause = %v, want repository constraint failure", got)
+	}
+	if details := logs.FilterMessage("handler error").All(); len(details) != 0 {
+		t.Errorf("handler emitted a separate error log: %d entries", len(details))
 	}
 }
 

@@ -4,11 +4,10 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
-	"go.uber.org/zap"
 
 	"github.com/cristianortiz/dev-forge/internal/auth/domain"
 	"github.com/cristianortiz/dev-forge/internal/auth/ports"
-	sharedlogger "github.com/cristianortiz/dev-forge/internal/shared/logger"
+	sharedserver "github.com/cristianortiz/dev-forge/internal/shared/server"
 )
 
 // Fiber context local keys.
@@ -19,7 +18,7 @@ const (
 
 // Authenticated validates the Bearer token and syncs the user to the DB.
 // On success it stores *domain.User and *ports.Claims in Fiber locals.
-func Authenticated(authSvc ports.AuthService, logger *zap.Logger) fiber.Handler {
+func Authenticated(authSvc ports.AuthService) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		rawToken := bearerToken(c)
 		if rawToken == "" {
@@ -28,13 +27,13 @@ func Authenticated(authSvc ports.AuthService, logger *zap.Logger) fiber.Handler 
 
 		claims, err := authSvc.ValidateToken(c.Context(), rawToken)
 		if err != nil {
-			sharedlogger.WithContext(logger, c.Context()).Debug("token validation failed", zap.Error(err))
+			sharedserver.SetErrorDetails(c, "invalid_or_expired_token", err)
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
 		}
 
 		user, err := authSvc.SyncUser(c.Context(), claims)
 		if err != nil {
-			sharedlogger.WithContext(logger, c.Context()).Error("user sync failed", zap.Error(err))
+			sharedserver.SetErrorDetails(c, "auth_user_sync_failed", err)
 			return fiber.NewError(fiber.StatusInternalServerError, "internal error")
 		}
 

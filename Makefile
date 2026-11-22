@@ -4,11 +4,11 @@ help: ## Show available targets
 
 # ── Dev ───────────────────────────────────────────────────────────────────────
 .PHONY: dev
-dev: ## Run the server with hot-reload (requires air)
+dev: setup ## Start PostgreSQL, observability, apply migrations, and run with hot-reload
 	@set -a && . ./.env && set +a && air -c .air.toml
 
 .PHONY: run
-run: ## Run the server without hot-reload
+run: setup ## Start PostgreSQL, observability, apply migrations, and run the server
 	@set -a && . ./.env && set +a && go run ./cmd/server/
 
 .PHONY: build
@@ -83,7 +83,7 @@ endif
 
 .PHONY: docker-up
 docker-up: ## Start local PostgreSQL (Zitadel is external)
-	docker compose -f $(COMPOSE_FILE) up -d
+	docker compose -f $(COMPOSE_FILE) up -d --wait postgres
 
 .PHONY: docker-down
 docker-down: ## Stop and remove all infra containers
@@ -123,8 +123,8 @@ obs-smoke: ## Run API integration checks against Grafana, Tempo, Loki, Prometheu
 
 # ── Full setup ────────────────────────────────────────────────────────────────
 .PHONY: setup
-setup: docker-up migrate-up ## Start infra and apply migrations
-	@echo "Setup complete. Run 'make run' to start the server."
+setup: docker-up obs-up migrate-up ## Start PostgreSQL and observability, then apply migrations
+	@echo "Local services and migrations are ready."
 
 .PHONY: seed
 seed: ## Insert built-in project templates (idempotent)

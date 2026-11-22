@@ -17,7 +17,18 @@ no representa una instalación durable ni de alta disponibilidad.
 Desde la raíz del repositorio:
 
 ```sh
-make obs-up
+make dev
+```
+
+`make dev` inicia PostgreSQL y el stack de observabilidad, aplica las
+migraciones y ejecuta la API con hot reload. `make run` hace lo mismo sin
+hot reload; ambos cargan las variables de `.env`. Zitadel continúa siendo un
+servicio externo. Para iniciar solo los servicios y aplicar migraciones, usa
+`make setup`.
+
+Las comprobaciones del stack se ejecutan por separado:
+
+```sh
 make obs-smoke-stack
 make obs-smoke
 ```
@@ -39,9 +50,9 @@ acepta `OBS_GRAFANA_URL`, `OBS_GRAFANA_USER`, `OBS_GRAFANA_PASSWORD` y
 `OBS_OTLP_ENDPOINT` desde el entorno. `obs-smoke-stack` sigue siendo el smoke
 sintético independiente.
 
-## Dashboard HTTP
+## Dashboard de observabilidad
 
-Compose monta y provisiona [Dev Forge · Solicitudes HTTP](../deployments/grafana/dashboards/dev-forge-red.json)
+Compose monta y provisiona [Dev Forge · Observabilidad](../deployments/grafana/dashboards/dev-forge-red.json)
 en la carpeta *Dev Forge*, sin pasos de importación en la UI. El dashboard se
 limita a `service_name="dev-forge"` para excluir las series aleatorias de los
 smoke tests. Muestra el total y los conteos 2xx/3xx/4xx/5xx del rango
@@ -51,6 +62,44 @@ enteras; la tabla muestra solo códigos con solicitudes y permite distinguir,
 por ejemplo, 200 de 401 y 500. El
 datasource Prometheus usa el UID `prometheus`; la provisión de archivos está en
 [dev-forge.yaml](../deployments/grafana/provisioning/dev-forge.yaml).
+
+También incluye una tabla de solicitudes por endpoint ordenada de mayor a menor,
+latencia p95 por endpoint para el rango seleccionado, un panel con los últimos
+50 logs INFO de acceso, un resumen de errores HTTP por status y endpoint, una
+lista de requests 4xx/5xx y una vista de hasta 200 diagnósticos de aplicación.
+La vista de requests fallidas selecciona solo logs de acceso (`method` presente)
+y muestra en una única entrada el método, ruta, status, `error_code`, mensaje y,
+cuando corresponde, la causa técnica. El panel de diagnóstico se reserva para
+eventos DEBUG/WARN/ERROR que no corresponden a una request HTTP, evitando
+repetir el detalle en dos paneles. Los 4xx mantienen WARN y los 5xx ERROR: el
+panel dedicado destaca los errores por status sin cambiar su severidad. Se omite
+el stack trace para mantener los paneles legibles; el log completo sigue
+disponible al consultar Loki desde Explore. Al abrir una entrada se pueden
+inspeccionar atributos como la latencia y los IDs de traza.
+Las rutas se toman de `http_route` en Prometheus y se omiten
+requests sin ruta reconocida (por ejemplo, 404) para evitar cardinalidad por
+paths arbitrarios. Los logs muestran los atributos estructurados `method`,
+`route`, `status`, `latency` y los IDs de traza; no se indexan `trace_id` ni
+`span_id` como labels de Loki.
+
+El datasource Loki ya enlaza `trace_id` con Tempo y Tempo busca en Loki por
+servicio e ID de traza. Así, al abrir el detalle de un log se puede navegar a su
+traza; desde Tempo se puede volver a los logs relacionados. La consulta de Tempo
+amplía el intervalo del span 5 segundos en ambos extremos para incluir logs
+emitidos justo antes o después del span. El smoke integrado verifica ambas
+configuraciones de correlación, el margen temporal y los campos de los logs.
+
+En desarrollo, la consola conserva el mensaje del error y el caller, pero no
+imprime el stack trace completo. Fiber también recupera los panics sin volcar
+el stack a `stderr`; la respuesta sigue siendo 500 y el error queda registrado.
+Los errores de dominio tipados mantienen sus mensajes y mapeos HTTP actuales.
+Los handlers de templates y el middleware de autenticación añaden códigos de
+error de baja cardinalidad al log de acceso consolidado, no a las labels
+indexadas de Loki ni al contrato HTTP de respuesta. La validación fallida usa
+`invalid_or_expired_token` y la sincronización fallida del usuario usa
+`auth_user_sync_failed`; el valor del token no se añade como campo del log. Las
+alertas operativas por tasa 5xx o p95 quedan pendientes de acordar umbrales y
+canal de notificación.
 
 ## Contrato de señales comprobado
 

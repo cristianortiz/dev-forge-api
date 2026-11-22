@@ -36,15 +36,16 @@ type Server struct {
 func New(cfg *config.Config, logger *zap.Logger) *Server {
 	app := fiber.New(fiber.Config{
 		AppName:      "dev-forge",
-		ErrorHandler: defaultErrorHandler(logger),
+		ErrorHandler: defaultErrorHandler(),
 	})
 
 	// ── base middleware ────────────────────────────────────────────────────
 	// Order matters:
 	//   - the outer recover is a final guard for middleware panics.
+	//   - recover middleware converts panics to 500s without dumping Go stacks.
 	//   - accessLogger is outside OTEL so it sees the final status and trace ID.
 	app.Use(requestid.New())
-	app.Use(recover.New(recover.Config{EnableStackTrace: cfg.Debug}))
+	app.Use(recover.New(recover.Config{EnableStackTrace: false}))
 	app.Use(accessLogger(logger))
 	if cfg.OTEL.Enabled {
 		app.Use(otelMiddleware())
@@ -52,7 +53,7 @@ func New(cfg *config.Config, logger *zap.Logger) *Server {
 		app.Use(captureTraceContext)
 	}
 	// Recover handler panics inside OTEL so its span and metrics record the 500.
-	app.Use(recover.New(recover.Config{EnableStackTrace: cfg.Debug}))
+	app.Use(recover.New(recover.Config{EnableStackTrace: false}))
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},

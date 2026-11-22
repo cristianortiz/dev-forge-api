@@ -16,6 +16,7 @@ services:
     volumes:
       - ./grafana/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards/custom:ro
       - ./grafana/provisioning/dev-forge.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/dev-forge.yaml:ro
+      - ./grafana/provisioning/datasources.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/grafana-datasources.yaml:ro
     networks:
       - dev-forge-net
     healthcheck:

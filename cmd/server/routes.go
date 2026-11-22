@@ -58,7 +58,7 @@ func registerRoutes(app *fiber.App, db *database.DB, cfg *config.Config, log *za
 	}
 	// authMW: validates the Bearer token via Zitadel and injects the User into c.Locals.
 	// Applied to every protected route.
-	authMW := middleware.Authenticated(authService, log)
+	authMW := middleware.Authenticated(authService)
 	// adminMW: RBAC gate — rejects requests whose User role != admin.
 	// Applied only to write/admin endpoints.
 	adminMW := middleware.RequireRole(roleAdmin)
@@ -70,10 +70,7 @@ func registerRoutes(app *fiber.App, db *database.DB, cfg *config.Config, log *za
 	// ── Phase 1: Templates ────────────────────────────────────────────────
 	// Endpoints: GET /templates, GET /templates/:id (all roles)
 	//            POST /templates, PATCH /templates/:id, DELETE /templates/:id (admin only)
-	templatehandler.New(
-		templatesvc.New(templaterepo.New(db), log),
-		log,
-	).RegisterRoutes(api, authMW, adminMW)
+	templatehandler.New(templatesvc.New(templaterepo.New(db), log)).RegisterRoutes(api, authMW, adminMW)
 
 	// ── Phase 1: Applications (TODO) ──────────────────────────────────────
 	// apphandler.New(...).RegisterRoutes(api, authMW)

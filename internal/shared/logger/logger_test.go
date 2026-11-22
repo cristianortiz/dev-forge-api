@@ -4,6 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -15,6 +19,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/cristianortiz/dev-forge/internal/shared/config"
 )
 
 type capturedLog struct {
@@ -42,6 +48,43 @@ type capturedProvider struct {
 
 func (p *capturedProvider) Logger(string, ...log.LoggerOption) log.Logger {
 	return p.logger
+}
+
+func TestNewDebugLoggerKeepsErrorWithoutStackTrace(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "debug")
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalStderr := os.Stderr
+	os.Stderr = write
+	t.Cleanup(func() {
+		os.Stderr = originalStderr
+		_ = write.Close()
+		_ = read.Close()
+	})
+
+	logger, err := New(&config.Config{Debug: true, Environment: "development"})
+	if err != nil {
+		t.Fatalf("create logger: %v", err)
+	}
+	logger.Error("handler error", zap.Error(errors.New("business validation failed")))
+	if err := write.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = originalStderr
+
+	output, err := io.ReadAll(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(output), "handler error") ||
+		!strings.Contains(string(output), "business validation failed") {
+		t.Errorf("error message was not retained: %s", output)
+	}
+	if strings.Contains(string(output), "goroutine ") {
+		t.Errorf("logger printed a Go stack trace: %s", output)
+	}
 }
 
 func TestWithContextCorrelatesOTLPAndStdout(t *testing.T) {
