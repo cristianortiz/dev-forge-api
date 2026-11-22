@@ -11,7 +11,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 
 	"github.com/cristianortiz/dev-forge/internal/auth/domain"
 	"github.com/cristianortiz/dev-forge/internal/auth/ports"
@@ -36,7 +35,7 @@ func TestAuthenticated_PassesTheRequestSpanToTheAuthService(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
 	app := fiber.New()
 	app.Use(fiberotel.New(fiberotel.WithTracerProvider(tp)))
-	app.Get("/", Authenticated(svc, zap.NewNop()), func(c fiber.Ctx) error {
+	app.Get("/", Authenticated(svc), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 

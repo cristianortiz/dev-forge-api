@@ -12,7 +12,27 @@ import (
 	sharedlogger "github.com/cristianortiz/dev-forge/internal/shared/logger"
 )
 
-const traceContextLocal = "otel_span_context"
+const (
+	traceContextLocal = "otel_span_context"
+	errorCodeLocal    = "observability_error_code"
+	errorMessageLocal = "observability_error_message"
+	errorCauseLocal   = "observability_error_cause"
+)
+
+// SetErrorCode attaches a stable, low-cardinality code to the request log.
+func SetErrorCode(c fiber.Ctx, code string) {
+	if code != "" {
+		c.Locals(errorCodeLocal, code)
+	}
+}
+
+// SetErrorDetails adds the underlying cause to the single access log for a failed request.
+func SetErrorDetails(c fiber.Ctx, code string, cause error) {
+	SetErrorCode(c, code)
+	if cause != nil {
+		c.Locals(errorCauseLocal, cause)
+	}
+}
 
 // accessLogger writes one summary line per request with the status the client
 // receives and, when tracing is on, the trace ID. It must be mounted outside the
@@ -20,8 +40,6 @@ const traceContextLocal = "otel_span_context"
 // sets X-Trace-Id when it finishes. Without it (telemetry disabled), an error
 // returned by the handler chain is mapped to its status here, the same way
 // defaultErrorHandler does.
-//
-// The error detail is not repeated here; defaultErrorHandler logs it once.
 func accessLogger(logger *zap.Logger) fiber.Handler {
 	return func(c fiber.Ctx) (err error) {
 		start := time.Now()
@@ -40,9 +58,24 @@ func accessLogger(logger *zap.Logger) fiber.Handler {
 		status := c.Response().StatusCode()
 		if err != nil {
 			status = statusFromError(err)
+			captureErrorDetails(c, err)
 		}
 		logRequest(logger, c, start, status)
 		return err
+	}
+}
+
+func captureErrorDetails(c fiber.Ctx, err error) {
+	if _, ok := c.Locals(errorMessageLocal).(string); !ok {
+		message := "internal server error"
+		var fiberErr *fiber.Error
+		if errors.As(err, &fiberErr) {
+			message = fiberErr.Message
+		}
+		c.Locals(errorMessageLocal, message)
+	}
+	if _, ok := c.Locals(errorCauseLocal).(error); !ok {
+		c.Locals(errorCauseLocal, err)
 	}
 }
 
@@ -70,6 +103,17 @@ func logRequest(logger *zap.Logger, c fiber.Ctx, start time.Time, status int) {
 		zap.Duration("latency", time.Since(start)),
 		zap.String("request_id", c.GetRespHeader(requestIDHeader)),
 	}
+	if status >= fiber.StatusBadRequest {
+		if message, ok := c.Locals(errorMessageLocal).(string); ok {
+			fields = append(fields, zap.String("error_message", message))
+		}
+		if errorCode, ok := c.Locals(errorCodeLocal).(string); ok {
+			fields = append(fields, zap.String("error_code", errorCode))
+		}
+		if cause, ok := c.Locals(errorCauseLocal).(error); ok {
+			fields = append(fields, zap.Error(cause))
+		}
+	}
 	entry.Write(fields...)
 }
 
@@ -90,10 +134,9 @@ func statusFromError(err error) int {
 	return fiber.StatusInternalServerError
 }
 
-// defaultErrorHandler converts errors into a consistent JSON response and logs
-// the error detail once. Server errors are logged at error level; client errors
-// are already summarised by the access log, so their detail is only debug.
-func defaultErrorHandler(logger *zap.Logger) fiber.ErrorHandler {
+// defaultErrorHandler converts errors into a consistent JSON response and stores
+// safe details for accessLogger to emit once with the final request status.
+func defaultErrorHandler() fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
 		code := statusFromError(err)
 		message := "internal server error"
@@ -102,13 +145,9 @@ func defaultErrorHandler(logger *zap.Logger) fiber.ErrorHandler {
 		if errors.As(err, &e) {
 			message = e.Message
 		}
-
-		if entry := sharedlogger.WithContext(logger, c.Context()).Check(errorLogLevel(code), "handler error"); entry != nil {
-			entry.Write(
-				zap.Int("status", code),
-				zap.String("route", requestRoute(c)),
-				zap.Error(err),
-			)
+		c.Locals(errorMessageLocal, message)
+		if _, ok := c.Locals(errorCauseLocal).(error); !ok {
+			c.Locals(errorCauseLocal, err)
 		}
 
 		return c.Status(code).JSON(fiber.Map{
@@ -116,11 +155,4 @@ func defaultErrorHandler(logger *zap.Logger) fiber.ErrorHandler {
 			"request_id": c.GetRespHeader(requestIDHeader),
 		})
 	}
-}
-
-func errorLogLevel(status int) zapcore.Level {
-	if status >= fiber.StatusInternalServerError {
-		return zapcore.ErrorLevel
-	}
-	return zapcore.DebugLevel
 }

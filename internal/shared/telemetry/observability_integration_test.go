@@ -125,6 +125,7 @@ func TestObservabilityIntegration(t *testing.T) {
 	if !ok {
 		t.Fatal("Grafana Tempo datasource is missing")
 	}
+	assertTraceCorrelations(t, grafana, lokiUID, tempoUID)
 	assertHTTPDashboard(t, grafana, queryCtx)
 
 	okSelector := fmt.Sprintf(
@@ -211,6 +212,84 @@ func TestObservabilityIntegration(t *testing.T) {
 				if stream.Metadata["span_id"] == "" {
 					t.Error("Loki access log has no span_id metadata")
 				}
+				for key, want := range map[string]string{
+					"method": "GET",
+					"route":  "/_obs/smoke/db",
+					"status": "200",
+				} {
+					if got := stream.Metadata[key]; got != want {
+						t.Errorf("Loki access log %s = %q, want %q", key, got, want)
+					}
+				}
+				if stream.Metadata["latency"] == "" {
+					t.Error("Loki access log has no latency metadata")
+				}
+			}
+		}
+	}
+
+	httpErrorQuery := fmt.Sprintf(
+		`{service_name=%q} | status=~"4..|5.." | method!=""`,
+		serviceName,
+	)
+	httpErrorBody, err := grafana.get(queryCtx, "/api/datasources/proxy/uid/"+url.PathEscape(lokiUID)+
+		"/loki/api/v1/query_range", url.Values{
+		"query": []string{httpErrorQuery},
+		"start": []string{strconv.FormatInt(time.Now().Add(-10*time.Minute).UnixNano(), 10)},
+		"end":   []string{strconv.FormatInt(time.Now().UnixNano(), 10)},
+		"limit": []string{"100"},
+	})
+	if err != nil {
+		t.Fatalf("query HTTP error access logs: %v", err)
+	}
+	httpErrorStreams, err := parseLokiStreams(httpErrorBody)
+	if err != nil {
+		t.Fatalf("decode HTTP error access logs: %v", err)
+	}
+	statusCounts := map[string]int{}
+	for _, stream := range httpErrorStreams {
+		for _, record := range stream.Records {
+			statusCounts[stream.Metadata["status"]]++
+			if record.Message != "request" || stream.Metadata["method"] == "" {
+				t.Errorf("HTTP error query returned a non-access log: metadata=%v message=%q", stream.Metadata, record.Message)
+			}
+		}
+	}
+	if statusCounts["400"] != 1 || statusCounts["500"] != 2 ||
+		statusCounts["404"] != 30 || len(statusCounts) != 3 {
+		t.Errorf("HTTP error query status counts = %v, want one 400, two 500, and thirty 404 access logs", statusCounts)
+	}
+
+	formattedLogQuery := fmt.Sprintf(
+		`{service_name=%q} | trace_id=%q | line_format "{{if .method}}{{.method}} {{.route}} status={{.status}}{{else}}{{.severity_text}} {{.route}} status={{.status}} {{.exception_message}}{{end}}" | drop code_file_path, code_function_name, code_line_number, code_stacktrace, observed_timestamp, scope_name, telemetry_sdk_language, telemetry_sdk_name, telemetry_sdk_version, flags`,
+		serviceName, dbTraceID,
+	)
+	formattedLogBody, err := grafana.get(queryCtx, "/api/datasources/proxy/uid/"+url.PathEscape(lokiUID)+
+		"/loki/api/v1/query_range", url.Values{
+		"query": []string{formattedLogQuery},
+		"start": []string{strconv.FormatInt(time.Now().Add(-10*time.Minute).UnixNano(), 10)},
+		"end":   []string{strconv.FormatInt(time.Now().UnixNano(), 10)},
+		"limit": []string{"20"},
+	})
+	if err != nil {
+		t.Fatalf("query formatted Loki access log: %v", err)
+	}
+	formattedStreams, err := parseLokiStreams(formattedLogBody)
+	if err != nil {
+		t.Fatalf("decode formatted Loki access log: %v", err)
+	}
+	if countLogMessage(formattedStreams, "GET /_obs/smoke/db status=200") != 1 {
+		t.Fatalf("formatted Loki access log is missing the expected request summary: %s", formattedLogBody)
+	}
+	for _, stream := range formattedStreams {
+		if stream.Metadata["trace_id"] != dbTraceID ||
+			stream.Metadata["route"] != "/_obs/smoke/db" ||
+			stream.Metadata["status"] != "200" {
+			t.Errorf("formatted Loki access log lost trace/request metadata: %v", stream.Metadata)
+		}
+		for _, dropped := range []string{"code_file_path", "code_function_name", "code_stacktrace", "scope_name"} {
+			if _, exists := stream.Metadata[dropped]; exists {
+				t.Errorf("formatted Loki access log retained noisy metadata %q", dropped)
 			}
 		}
 	}
@@ -425,6 +504,62 @@ func integrationDataSources(t *testing.T, grafana integrationGrafana) map[string
 	return result
 }
 
+func assertTraceCorrelations(t *testing.T, grafana integrationGrafana, lokiUID, tempoUID string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	lokiBody, err := grafana.get(ctx, "/api/datasources/uid/"+url.PathEscape(lokiUID), nil)
+	if err != nil {
+		t.Fatalf("get Loki datasource configuration: %v", err)
+	}
+	var loki struct {
+		JSONData struct {
+			DerivedFields []struct {
+				Name          string `json:"name"`
+				DatasourceUID string `json:"datasourceUid"`
+			} `json:"derivedFields"`
+		} `json:"jsonData"`
+	}
+	if err := json.Unmarshal(lokiBody, &loki); err != nil {
+		t.Fatalf("decode Loki datasource configuration: %v", err)
+	}
+	hasTraceLink := false
+	for _, field := range loki.JSONData.DerivedFields {
+		if field.Name == "trace_id" && field.DatasourceUID == tempoUID {
+			hasTraceLink = true
+			break
+		}
+	}
+	if !hasTraceLink {
+		t.Errorf("Loki datasource has no trace_id link to Tempo datasource %q", tempoUID)
+	}
+
+	tempoBody, err := grafana.get(ctx, "/api/datasources/uid/"+url.PathEscape(tempoUID), nil)
+	if err != nil {
+		t.Fatalf("get Tempo datasource configuration: %v", err)
+	}
+	var tempo struct {
+		JSONData struct {
+			TracesToLogsV2 struct {
+				DatasourceUID      string `json:"datasourceUid"`
+				Query              string `json:"query"`
+				SpanStartTimeShift string `json:"spanStartTimeShift"`
+				SpanEndTimeShift   string `json:"spanEndTimeShift"`
+			} `json:"tracesToLogsV2"`
+		} `json:"jsonData"`
+	}
+	if err := json.Unmarshal(tempoBody, &tempo); err != nil {
+		t.Fatalf("decode Tempo datasource configuration: %v", err)
+	}
+	if tempo.JSONData.TracesToLogsV2.DatasourceUID != lokiUID ||
+		!strings.Contains(tempo.JSONData.TracesToLogsV2.Query, "trace_id") ||
+		tempo.JSONData.TracesToLogsV2.SpanStartTimeShift != "5s" ||
+		tempo.JSONData.TracesToLogsV2.SpanEndTimeShift != "5s" {
+		t.Errorf("Tempo datasource has no trace-to-logs query with a 5s time shift for Loki datasource %q", lokiUID)
+	}
+}
+
 func assertHTTPDashboard(t *testing.T, grafana integrationGrafana, ctx context.Context) {
 	t.Helper()
 	body := eventually(t, "provisioned Dev Forge HTTP dashboard", func() ([]byte, bool, error) {
@@ -434,44 +569,126 @@ func assertHTTPDashboard(t *testing.T, grafana integrationGrafana, ctx context.C
 		}
 		var response struct {
 			Dashboard struct {
-				Title string `json:"title"`
+				Title  string `json:"title"`
+				Panels []struct {
+					Targets []struct {
+						Expr     string `json:"expr"`
+						MaxLines int    `json:"maxLines"`
+					} `json:"targets"`
+				} `json:"panels"`
+				Templating struct {
+					List []struct {
+						Name     string `json:"name"`
+						Type     string `json:"type"`
+						AllValue string `json:"allValue"`
+						Current  struct {
+							Text  string `json:"text"`
+							Value string `json:"value"`
+						} `json:"current"`
+					} `json:"list"`
+				} `json:"templating"`
 			} `json:"dashboard"`
 		}
 		if err := json.Unmarshal(body, &response); err != nil {
 			return nil, false, err
 		}
-		return body, response.Dashboard.Title == "Dev Forge · Solicitudes HTTP", nil
+		hasFormattedLogs := false
+		hasDiagnosticLogs := false
+		hasHTTPErrorSummary := false
+		for _, panel := range response.Dashboard.Panels {
+			for _, target := range panel.Targets {
+				if strings.Contains(target.Expr, "drop code_file_path") {
+					hasFormattedLogs = true
+				}
+				if strings.Contains(target.Expr, `severity_text=~"${severity:raw}"`) &&
+					strings.Contains(target.Expr, `method=""`) && target.MaxLines == 200 {
+					hasDiagnosticLogs = true
+				}
+				if strings.Contains(target.Expr, `http_response_status_code=~"4..|5.."`) &&
+					strings.Contains(target.Expr, "http_route") {
+					hasHTTPErrorSummary = true
+				}
+			}
+		}
+		return body, response.Dashboard.Title == "Dev Forge · Observabilidad" &&
+			hasFormattedLogs && hasDiagnosticLogs && hasHTTPErrorSummary, nil
 	})
 	var response struct {
 		Dashboard struct {
 			Title  string `json:"title"`
 			Panels []struct {
-				Title   string `json:"title"`
+				Title      string `json:"title"`
+				Type       string `json:"type"`
+				Datasource struct {
+					UID string `json:"uid"`
+				} `json:"datasource"`
 				Targets []struct {
-					Expr string `json:"expr"`
+					Expr      string `json:"expr"`
+					QueryType string `json:"queryType"`
+					MaxLines  int    `json:"maxLines"`
 				} `json:"targets"`
+				Transformations []struct {
+					ID string `json:"id"`
+				} `json:"transformations"`
 				Options struct {
-					Legend struct {
+					ShowLabels       bool `json:"showLabels"`
+					EnableLogDetails bool `json:"enableLogDetails"`
+					Legend           struct {
 						Calcs []string `json:"calcs"`
 					} `json:"legend"`
 				} `json:"options"`
 			} `json:"panels"`
+			Templating struct {
+				List []struct {
+					Name     string `json:"name"`
+					Type     string `json:"type"`
+					AllValue string `json:"allValue"`
+					Current  struct {
+						Text  string `json:"text"`
+						Value string `json:"value"`
+					} `json:"current"`
+				} `json:"list"`
+			} `json:"templating"`
 		} `json:"dashboard"`
 		Meta struct {
 			FolderTitle string `json:"folderTitle"`
 		} `json:"meta"`
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
-		t.Fatalf("decode Dev Forge HTTP dashboard: %v", err)
+		t.Fatalf("decode Dev Forge observability dashboard: %v", err)
 	}
-	if response.Dashboard.Title != "Dev Forge · Solicitudes HTTP" || response.Meta.FolderTitle != "Dev Forge" {
+	if response.Dashboard.Title != "Dev Forge · Observabilidad" || response.Meta.FolderTitle != "Dev Forge" {
 		t.Fatalf("unexpected dashboard title/folder: %q / %q", response.Dashboard.Title, response.Meta.FolderTitle)
 	}
-	if len(response.Dashboard.Panels) != 7 {
-		t.Fatalf("Dev Forge HTTP dashboard has %d panels, want 7", len(response.Dashboard.Panels))
+	if len(response.Dashboard.Panels) != 13 {
+		t.Fatalf("Dev Forge observability dashboard has %d panels, want 13", len(response.Dashboard.Panels))
 	}
-	var statusCountQuery, requestRateQuery string
+	var (
+		httpStatusDefault, severityDefault, searchDefault bool
+	)
+	for _, variable := range response.Dashboard.Templating.List {
+		switch variable.Name {
+		case "httpStatus":
+			httpStatusDefault = variable.Type == "custom" &&
+				variable.Current.Text == "All" &&
+				variable.AllValue == "4..|5.."
+		case "severity":
+			severityDefault = variable.Type == "custom" &&
+				variable.Current.Text == "All" &&
+				variable.AllValue == "debug|warn|error"
+		case "logSearch":
+			searchDefault = variable.Type == "textbox" &&
+				variable.Current.Value == ""
+		}
+	}
+	if !httpStatusDefault || !severityDefault || !searchDefault {
+		t.Errorf("log filters are not unfiltered by default: httpStatus=%t severity=%t search=%t",
+			httpStatusDefault, severityDefault, searchDefault)
+	}
+	var statusCountQuery, requestRateQuery, endpointCountQuery, p95Query string
+	var logsQuery, diagnosticLogsQuery, httpErrorLogsQuery, httpErrorSummaryQuery string
 	var requestRateCalcs []string
+	logPanels := 0
 	for _, panel := range response.Dashboard.Panels {
 		for _, target := range panel.Targets {
 			if !strings.Contains(target.Expr, `service_name="dev-forge"`) {
@@ -484,7 +701,41 @@ func assertHTTPDashboard(t *testing.T, grafana integrationGrafana, ctx context.C
 				requestRateQuery = target.Expr
 				requestRateCalcs = panel.Options.Legend.Calcs
 			}
+			if strings.Contains(target.Expr, "sum by (http_route)") {
+				endpointCountQuery = target.Expr
+			}
+			if strings.Contains(target.Expr, "histogram_quantile(0.95") {
+				p95Query = target.Expr
+			}
+			if panel.Title == "Errores HTTP por status y endpoint" {
+				httpErrorSummaryQuery = target.Expr
+			}
+			if panel.Type == "logs" {
+				logPanels++
+				wantMaxLines := 50
+				switch panel.Title {
+				case "Requests fallidas · 4xx/5xx":
+					wantMaxLines = 100
+				case "Diagnósticos de plataforma · DEBUG/WARN/ERROR":
+					wantMaxLines = 200
+				}
+				if panel.Datasource.UID != "loki" || target.MaxLines != wantMaxLines ||
+					!panel.Options.ShowLabels || !panel.Options.EnableLogDetails {
+					t.Errorf("unexpected recent logs panel configuration: type=%q datasource=%q maxLines=%d", panel.Type, panel.Datasource.UID, target.MaxLines)
+				}
+				switch panel.Title {
+				case "Logs recientes · Dev Forge":
+					logsQuery = target.Expr
+				case "Requests fallidas · 4xx/5xx":
+					httpErrorLogsQuery = target.Expr
+				case "Diagnósticos de plataforma · DEBUG/WARN/ERROR":
+					diagnosticLogsQuery = target.Expr
+				}
+			}
 		}
+	}
+	if logPanels != 3 {
+		t.Errorf("dashboard has %d logs panels, want recent, HTTP errors, and diagnostic views", logPanels)
 	}
 	for _, expected := range []string{
 		"round(sum by (http_response_status_code)",
@@ -512,6 +763,78 @@ func assertHTTPDashboard(t *testing.T, grafana integrationGrafana, ctx context.C
 	}
 	if strings.Contains(rateCalcs, "sum") {
 		t.Errorf("HTTP request rate legend includes the misleading sum calculation: %v", requestRateCalcs)
+	}
+	for _, expected := range []string{
+		"sum by (http_route)",
+		`http_route!=""`,
+		"[$__range]",
+	} {
+		if !strings.Contains(endpointCountQuery, expected) {
+			t.Errorf("endpoint request query %q is missing %q", endpointCountQuery, expected)
+		}
+	}
+	for _, expected := range []string{
+		"histogram_quantile(0.95",
+		"_bucket",
+		`http_route!=""`,
+		"[$__range]",
+	} {
+		if !strings.Contains(p95Query, expected) {
+			t.Errorf("endpoint p95 query %q is missing %q", p95Query, expected)
+		}
+	}
+	for _, expected := range []string{
+		`{service_name="dev-forge"}`,
+		`severity_text="info"`,
+		`method!=""`,
+		`line_format "{{.method}} {{.route}} status={{.status}}"`,
+		"drop code_file_path",
+		"code_stacktrace",
+	} {
+		if !strings.Contains(logsQuery, expected) {
+			t.Errorf("recent logs query %q is missing %q", logsQuery, expected)
+		}
+	}
+	for _, expected := range []string{
+		`{service_name="dev-forge"}`,
+		`status=~"${httpStatus:raw}"`,
+		`method!=""`,
+		".error_code",
+		".error_message",
+		".exception_message",
+		`|= ${logSearch:doublequote}`,
+		"code_stacktrace",
+	} {
+		if !strings.Contains(httpErrorLogsQuery, expected) {
+			t.Errorf("HTTP error logs query %q is missing %q", httpErrorLogsQuery, expected)
+		}
+	}
+	for _, expected := range []string{
+		`service_name="dev-forge"`,
+		`http_response_status_code=~"4..|5.."`,
+		"sum by (http_response_status_code, http_route)",
+		`label_replace(increase(`,
+		`"unmatched"`,
+		"[$__range]",
+	} {
+		if !strings.Contains(httpErrorSummaryQuery, expected) {
+			t.Errorf("HTTP error summary query %q is missing %q", httpErrorSummaryQuery, expected)
+		}
+	}
+	for _, expected := range []string{
+		`{service_name="dev-forge"}`,
+		`severity_text=~"${severity:raw}"`,
+		`method=""`,
+		".error_code",
+		`|= ${logSearch:doublequote}`,
+		"code_stacktrace",
+	} {
+		if !strings.Contains(diagnosticLogsQuery, expected) {
+			t.Errorf("diagnostic logs query %q is missing %q", diagnosticLogsQuery, expected)
+		}
+	}
+	if !strings.Contains(logsQuery, `|= ${logSearch:doublequote}`) {
+		t.Errorf("recent logs query %q does not use the free-text filter", logsQuery)
 	}
 }
 

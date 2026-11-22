@@ -8,7 +8,6 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/cristianortiz/dev-forge/internal/auth/domain"
 	"github.com/cristianortiz/dev-forge/internal/auth/ports"
@@ -40,7 +39,7 @@ func (m *mockAuthService) GetUserByID(ctx context.Context, id string) (*domain.U
 
 func TestAuthenticated_MissingToken(t *testing.T) {
 	app := fiber.New()
-	app.Get("/", Authenticated(&mockAuthService{}, zap.NewNop()), func(c fiber.Ctx) error {
+	app.Get("/", Authenticated(&mockAuthService{}), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 	req := httptest.NewRequest("GET", "/", nil)
@@ -60,7 +59,7 @@ func TestAuthenticated_InvalidToken(t *testing.T) {
 		},
 	}
 	app := fiber.New()
-	app.Get("/", Authenticated(svc, zap.NewNop()), func(c fiber.Ctx) error {
+	app.Get("/", Authenticated(svc), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 	req := httptest.NewRequest("GET", "/", nil)
@@ -84,7 +83,7 @@ func TestAuthenticated_SyncUserError(t *testing.T) {
 		},
 	}
 	app := fiber.New()
-	app.Get("/", Authenticated(svc, zap.NewNop()), func(c fiber.Ctx) error {
+	app.Get("/", Authenticated(svc), func(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 	req := httptest.NewRequest("GET", "/", nil)
@@ -113,7 +112,7 @@ func TestAuthenticated_Success(t *testing.T) {
 		gotClaims *ports.Claims
 	)
 	app := fiber.New()
-	app.Get("/", Authenticated(svc, zap.NewNop()), func(c fiber.Ctx) error {
+	app.Get("/", Authenticated(svc), func(c fiber.Ctx) error {
 		gotUser = GetUser(c)
 		gotClaims = GetClaims(c)
 		return c.SendStatus(fiber.StatusOK)

@@ -300,11 +300,14 @@ Cierra el pendiente «verificar el stack local con la app real» y los criterios
 | OP-5.1 | Test de integración etiquetado (`//go:build obsintegration`) que levanta la app en proceso con telemetría real hacia `localhost:4318`, ejecuta requests (2xx, 4xx, 5xx, panic, un flujo con DB, muchas rutas 404 y muchos IDs) y consulta Tempo, Loki y Prometheus por el proxy de Grafana con reintentos y timeout. Target `make obs-smoke`. | ✅ `make obs-up && make obs-smoke` |
 | OP-5.2 | Aserciones: métricas `http_server_request_duration_seconds_*` con `http_route` y status esperados; traza HTTP + span pgx; log encontrado una vez con su `trace_id`; **sin series nuevas** por ID o 404 distinto. | ✅ Test |
 | OP-5.3 | Registrar los **nombres reales** tras la traducción OTEL → Prometheus y las labels promovidas desde atributos de recurso (`service_name`, `deployment_environment_name`) en Loki y Prometheus. | ✅ Tabla en [docs/observability-local.md](docs/observability-local.md) |
-| OP-5.4 | Dashboard HTTP provisionado por archivo: total y conteo 2xx/3xx/4xx/5xx para `dev-forge`, conteos agrupados por código HTTP en el rango seleccionado y tasa de solicitudes/min por código a lo largo del tiempo. | ✅ Dashboard HTTP consultado por API |
+| OP-5.4 | Dashboard de observabilidad provisionado por archivo: total y conteo 2xx/3xx/4xx/5xx, tasa/min por status, solicitudes y p95 por endpoint, resumen de errores por status/ruta, requests 4xx/5xx y diagnósticos sin duplicar accesos, más correlación Loki ↔ Tempo con margen de 5s. | ✅ Dashboard y salto Loki → Tempo verificados en Grafana; consultas, provisioning y margen verificados por API y smoke |
 | OP-5.5 | Medir volumen: series activas, bytes de logs y trazas por request y por hora con tráfico de ejemplo; extrapolar a dev+qa del homelab. Sirve para **validar o corregir el dimensionado inicial** (§13 decisión 5). | ✅ Tabla medida y extrapolación en [docs/observability-local.md](docs/observability-local.md) |
 | OP-5.6 | Caso de traza no muestreada: con `OTEL_TRACES_SAMPLER=parentbased_traceidratio` y ratio 0 → el log lleva IDs inválidos o ausentes y no rompe nada. | ✅ Test |
+| OP-5.7 | Mejorar diagnóstico HTTP sin alterar niveles: panel por status/ruta y una sola entrada 4xx/5xx que consolide acceso, mensaje, causa técnica y `error_code` estable/de baja cardinalidad; incluir errores de templates y autenticación, y dejar en Diagnóstico solo eventos no HTTP para evitar duplicados. | ✅ Panel y registro consolidado probados con status, mensaje, código y causa; autenticación también usa el log de acceso sin registrar tokens |
 
 **Gate F5:** ✅ `make obs-up && make obs-smoke` pasa; Grafana expone los datasources y el dashboard RED provisionados. Las estimaciones de bytes son tamaños de respuestas JSON de consulta, no almacenamiento físico.
+
+**Seguimiento operativo:** antes de configurar alertas de 5xx o latencia p95, definir umbrales, duración de evaluación y canal de notificación con el equipo; no alertar por cada 4xx esperado.
 
 ### Fase 6 — Robustez, privacidad y readiness ⬜
 
@@ -332,6 +335,7 @@ Criterios 7–9 de OBSERVABILITY.md §12.
 | OP-7.4 | **Pendiente: decidir despliegue del stack** en el homelab: Helm de los componentes frente al manifiesto de `otel-lgtm` como solución provisional (el upstream lo declara solo para dev/demo/test). Depende de OP-7.3 y de OP-5.5. | Decisión registrada |
 | OP-7.5 | Inventario de lo parametrizable para el blueprint (`service.name`, nombre de módulo, dashboard, datos del primer proyecto) y de lo que no debe copiarse. Alimenta DEV-FORGE-PLAN 4.5. | Lista revisada |
 | OP-7.6 | Actualizar OBSERVABILITY.md (§3 estado real, §13 pendientes) y DEV-FORGE-PLAN.md con lo realmente comprobado. | Diff revisado |
+| OP-7.7 | Definir e implementar alertas operativas para tasa de 5xx y latencia p95; acordar umbrales, ventana, severidad y receptor antes de activar notificaciones. No alertar por volumen bruto de 4xx. | Política acordada y reglas probadas |
 
 **Gate F7:** documentación suficiente para repetir el laboratorio y para que el homelab solo requiera variables de entorno; pendientes de homelab registrados.
 

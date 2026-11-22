@@ -11,7 +11,6 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/cristianortiz/dev-forge/internal/template/domain"
 	"github.com/cristianortiz/dev-forge/internal/template/ports"
@@ -57,10 +56,14 @@ func newTestApp(svc ports.TemplateService) *fiber.App {
 			if errors.As(err, &fe) {
 				code = fe.Code
 			}
-			return c.Status(code).JSON(fiber.Map{"error": err.Error()})
+			body := fiber.Map{"error": err.Error()}
+			if errorCode, ok := c.Locals("observability_error_code").(string); ok {
+				body["error_code"] = errorCode
+			}
+			return c.Status(code).JSON(body)
 		},
 	})
-	New(svc, zap.NewNop()).RegisterRoutes(app, passThrough, passThrough)
+	New(svc).RegisterRoutes(app, passThrough, passThrough)
 	return app
 }
 
@@ -199,6 +202,13 @@ func TestGetByID_InvalidUUID_Returns400(t *testing.T) {
 
 	if resp.StatusCode != fiber.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["error_code"] != "invalid_template_id" {
+		t.Errorf("error_code = %v, want invalid_template_id", body["error_code"])
 	}
 }
 

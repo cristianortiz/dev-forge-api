@@ -11,7 +11,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
-	"go.uber.org/zap"
 
 	"github.com/cristianortiz/dev-forge/internal/template/domain"
 	"github.com/cristianortiz/dev-forge/internal/template/ports"
@@ -66,7 +65,7 @@ func TestHandlers_PassTheRequestSpanToTheUseCase(t *testing.T) {
 			tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(spans))
 			app := fiber.New()
 			app.Use(fiberotel.New(fiberotel.WithTracerProvider(tp)))
-			New(svc, zap.NewNop()).RegisterRoutes(app, passThrough, passThrough)
+			New(svc).RegisterRoutes(app, passThrough, passThrough)
 
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			if tt.body != nil {
